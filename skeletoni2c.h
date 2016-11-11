@@ -26,19 +26,12 @@ Revision History:
 #ifndef _SKELETONI2C_H_
 #define _SKELETONI2C_H_
 
-#include "hw.h"
-
 //
 // Skeleton I2C controller registers.
 //
 
 typedef struct SKELETONI2C_REGISTERS
 {
-    // TODO: Update this register structure to match the
-    //       register mapping of the controller hardware.
-
-    __declspec(align(4)) HWREG<ULONG>  Reg0;
-    __declspec(align(4)) HWREG<ULONG>  Reg1;
 }
 SKELETONI2C_REGISTERS, *PSKELETONI2C_REGISTERS;
 

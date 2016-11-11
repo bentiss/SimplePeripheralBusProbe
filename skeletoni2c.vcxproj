@@ -76,7 +76,19 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" />
   </ImportGroup>
   <ItemGroup Label="WrappedTaskItems">
-    <ClCompile Include="driver.cpp; device.cpp; controller.cpp; hw.cpp">
+    <ClCompile Include="driver.cpp">
+      <WppEnabled>true</WppEnabled>
+      <WppKernelMode>true</WppKernelMode>
+      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
+      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
+    </ClCompile>
+    <ClCompile Include="device.cpp">
+      <WppEnabled>true</WppEnabled>
+      <WppKernelMode>true</WppKernelMode>
+      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
+      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
+    </ClCompile>
+    <ClCompile Include="controller.cpp">
       <WppEnabled>true</WppEnabled>
       <WppKernelMode>true</WppKernelMode>
       <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
