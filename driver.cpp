@@ -140,24 +140,6 @@ OnDeviceAdd(
     }  
         
     //
-    // Setup PNP/Power callbacks.
-    //
-
-    {
-        WDF_PNPPOWER_EVENT_CALLBACKS pnpCallbacks;
-        WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&pnpCallbacks);
-
-        pnpCallbacks.EvtDevicePrepareHardware = OnPrepareHardware;
-        pnpCallbacks.EvtDeviceReleaseHardware = OnReleaseHardware;
-        pnpCallbacks.EvtDeviceD0Entry = OnD0Entry;
-        pnpCallbacks.EvtDeviceD0Exit = OnD0Exit;
-        pnpCallbacks.EvtDeviceSelfManagedIoInit = OnSelfManagedIoInit;
-        pnpCallbacks.EvtDeviceSelfManagedIoCleanup = OnSelfManagedIoCleanup;
-
-        WdfDeviceInitSetPnpPowerEventCallbacks(FxDeviceInit, &pnpCallbacks);
-    }
-
-    //
     // Note: The SPB class extension sets a default 
     //       security descriptor to allow access to 
     //       user-mode drivers. This can be overridden 
