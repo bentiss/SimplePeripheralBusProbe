@@ -123,7 +123,23 @@ OnDeviceAdd(
     
     UNREFERENCED_PARAMETER(FxDriver);
 
-    //
+	//
+	// Setup PNP/Power callbacks.
+	//
+
+	{
+		WDF_PNPPOWER_EVENT_CALLBACKS pnpCallbacks;
+		WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&pnpCallbacks);
+
+		pnpCallbacks.EvtDevicePrepareHardware = OnPrepareHardware;
+		pnpCallbacks.EvtDeviceReleaseHardware = OnReleaseHardware;
+		pnpCallbacks.EvtDeviceD0Entry = OnD0Entry;
+		pnpCallbacks.EvtDeviceD0Exit = OnD0Exit;
+
+		WdfDeviceInitSetPnpPowerEventCallbacks(FxDeviceInit, &pnpCallbacks);
+	}
+	
+	//
     // Configure DeviceInit structure
     //
     
@@ -205,18 +221,18 @@ OnDeviceAdd(
         SPB_CONTROLLER_CONFIG_INIT(&spbConfig);
 
         //
-        // Register for target connect callback.  The driver
-        // does not need to respond to target disconnect.
+        // Register for target (dis)connect callbacks.
         //
 
         spbConfig.EvtSpbTargetConnect    = OnTargetConnect;
+		spbConfig.EvtSpbTargetDisconnect = OnTargetDisconnect;
 
         //
         // Register for IO callbacks.
         //
 
         spbConfig.ControllerDispatchType = WdfIoQueueDispatchSequential;
-        spbConfig.PowerManaged           = WdfFalse;
+        spbConfig.PowerManaged           = WdfTrue;
         spbConfig.EvtSpbIoRead           = OnRead;
         spbConfig.EvtSpbIoWrite          = OnWrite;
         spbConfig.EvtSpbIoSequence       = OnSequence;

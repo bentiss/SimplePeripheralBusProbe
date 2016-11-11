@@ -94,6 +94,11 @@
       <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
       <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
     </ClCompile>
+    <ClCompile Include="peripheral.cpp">
+      <WppEnabled Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</WppEnabled>
+      <WppTraceFunction Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
+      <WppScanConfigurationData Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">i2ctrace.h</WppScanConfigurationData>
+    </ClCompile>
     <Inf Include=".\skeletoni2c.inx">
       <Architecture>$(InfArch)</Architecture>
       <SpecifyArchitecture>true</SpecifyArchitecture>
@@ -208,8 +213,10 @@
     <None Exclude="@(None)" Include="*.txt;*.htm;*.html" />
     <None Exclude="@(None)" Include="*.ico;*.cur;*.bmp;*.dlg;*.rct;*.gif;*.jpg;*.jpeg;*.wav;*.jpe;*.tiff;*.tif;*.png;*.rc2" />
     <None Exclude="@(None)" Include="*.def;*.bat;*.hpj;*.asmx" />
+    <None Include="skeletoni2c.asl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="peripheral.h" />
     <ClInclude Exclude="@(ClInclude)" Include="skeletoni2c.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -58,6 +58,9 @@
     <ClCompile Include="device.cpp" />
     <ClCompile Include="controller.cpp" />
     <ClCompile Include="hw.cpp" />
+    <ClCompile Include="peripheral.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Inf Include=".\skeletoni2c.inx">
@@ -184,5 +187,13 @@
     <ClInclude Include="skeletoni2c.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="peripheral.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="skeletoni2c.asl">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

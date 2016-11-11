@@ -43,6 +43,9 @@ Revision History:
 #include "SPBCx.h"
 #include "i2ctrace.h"
 
+#define RESHUB_USE_HELPER_ROUTINES
+#include "reshub.h"
+
 
 /////////////////////////////////////////////////
 //
@@ -74,10 +77,24 @@ typedef struct _PNP_I2C_SERIAL_BUS_DESCRIPTOR {
     // followed by PNP_IO_DESCRIPTOR_RESOURCE_NAME
 } PNP_I2C_SERIAL_BUS_DESCRIPTOR, *PPNP_I2C_SERIAL_BUS_DESCRIPTOR;
 
+typedef struct _PNP_SPI_SERIAL_BUS_DESCRIPTOR {
+	PNP_SERIAL_BUS_DESCRIPTOR SerialBusDescriptor;
+	// see ACPI spec
+	ULONG ConnectionSpeed;
+	UCHAR DataBitLength;
+	UCHAR Phase;
+	UCHAR Polarity;
+	USHORT DeviceSelection;
+	// follwed by optional Vendor Data
+	// followed by PNP_IO_DESCRIPTOR_RESOURCE_NAME
+} PNP_SPI_SERIAL_BUS_DESCRIPTOR, *PPNP_SPI_SERIAL_BUS_DESCRIPTOR;
+
 #include "poppack.h"
 
 #define I2C_SERIAL_BUS_TYPE 0x01
 #define I2C_SERIAL_BUS_SPECIFIC_FLAG_10BIT_ADDRESS 0x0001
+
+#define SPI_SERIAL_BUS_TYPE 0x02
 
 /////////////////////////////////////////////////
 //
@@ -166,7 +183,37 @@ struct PBC_DEVICE
     // Handle to the WDF device.
     WDFDEVICE                      FxDevice;
 
-    // Structure mapped to the controller's
+	//
+	// Connection ID for SPB peripheral
+	//
+
+	LARGE_INTEGER PeripheralId;
+	
+	//
+	// SPB controller target
+	//
+
+	WDFIOTARGET TrueSpbController;
+
+	//
+	// SPB request object
+	//
+
+	WDFREQUEST SpbRequest;
+
+	//
+	// Input memory for request. Valid while request in progress.
+	//
+
+	WDFMEMORY InputMemory;
+
+	//
+	// Client request object
+	//
+
+	WDFREQUEST ClientRequest;
+
+	// Structure mapped to the controller's
     // register interface.
     PSKELETONI2C_REGISTERS         pRegisters;
     ULONG                          RegistersCb;
@@ -221,12 +268,27 @@ struct PBC_TARGET
 // Request context.
 //
 
-struct PBC_REQUEST 
+struct PBC_REQUEST
 {
     // TODO: Update this structure with variables that 
     //       need to be stored in the request context.
 
-    //
+	//
+	// Associated framework device object
+	//
+
+	WDFDEVICE FxDevice;
+
+	//
+	// Variables to track write length for a sequence request.
+	// There are needed to complete the client request with
+	// correct bytesReturned value.
+	//
+
+	BOOLEAN IsSpbSequenceRequest;
+	ULONG_PTR SequenceWriteLength;
+	
+	//
     // Variables that persist for the lifetime of
     // the request. Specifically these apply to an
     // entire sequence request (not just a single transfer).

@@ -26,6 +26,11 @@ Revision History:
 // WDF event callbacks.
 //
 
+EVT_WDF_DEVICE_PREPARE_HARDWARE      OnPrepareHardware;
+EVT_WDF_DEVICE_RELEASE_HARDWARE      OnReleaseHardware;
+EVT_WDF_DEVICE_D0_ENTRY              OnD0Entry;
+EVT_WDF_DEVICE_D0_EXIT               OnD0Exit;
+
 EVT_WDF_INTERRUPT_ISR                   OnInterruptIsr;
 EVT_WDF_INTERRUPT_DPC                   OnInterruptDpc;
 
@@ -36,6 +41,7 @@ EVT_WDF_REQUEST_CANCEL                  OnCancel;
 //
 
 EVT_SPB_TARGET_CONNECT               OnTargetConnect;
+EVT_SPB_TARGET_DISCONNECT            OnTargetDisconnect;
 EVT_SPB_CONTROLLER_LOCK              OnControllerLock;
 EVT_SPB_CONTROLLER_UNLOCK            OnControllerUnlock;
 EVT_SPB_CONTROLLER_READ              OnRead;
@@ -193,78 +199,78 @@ PbcRequestGetInfoRemaining(
 NTSTATUS
 FORCEINLINE
 PbcRequestGetByte(
-   _In_  PPBC_REQUEST  pRequest,
-   _In_  size_t        Index,
-   _Out_ UCHAR*        pByte
-   )
+	_In_  PPBC_REQUEST  pRequest,
+	_In_  size_t        Index,
+	_Out_ UCHAR*        pByte
+)
 /*++
 
-  Routine Description:
+Routine Description:
 
-    This is a helper routine used to retrieve the
-    specified byte of the current transfer descriptor buffer.
+This is a helper routine used to retrieve the
+specified byte of the current transfer descriptor buffer.
 
-  Arguments:
+Arguments:
 
-    pRequest - a pointer to the PBC request context
+pRequest - a pointer to the PBC request context
 
-    Index - index of desired byte in current transfer descriptor buffer
+Index - index of desired byte in current transfer descriptor buffer
 
-    pByte - pointer to the location for the specified byte
+pByte - pointer to the location for the specified byte
 
-  Return Value:
+Return Value:
 
-    STATUS_INFO_LENGTH_MISMATCH if invalid index,
-    otherwise STATUS_SUCCESS
+STATUS_INFO_LENGTH_MISMATCH if invalid index,
+otherwise STATUS_SUCCESS
 
 --*/
 {
-    PMDL mdl = pRequest->pMdlChain;
-    size_t mdlByteCount;
-    size_t currentOffset = Index;
-    PUCHAR pBuffer;
-    NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
+	PMDL mdl = pRequest->pMdlChain;
+	size_t mdlByteCount;
+	size_t currentOffset = Index;
+	PUCHAR pBuffer;
+	NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
 
-    //
-    // Check for out-of-bounds index
-    //
+	//
+	// Check for out-of-bounds index
+	//
 
-    if (Index < pRequest->Length)
-    {
-        while (mdl != NULL)
-        {
-            mdlByteCount = MmGetMdlByteCount(mdl);
+	if (Index < pRequest->Length)
+	{
+		while (mdl != NULL)
+		{
+			mdlByteCount = MmGetMdlByteCount(mdl);
 
-            if (currentOffset < mdlByteCount)
-            {
-                pBuffer = (PUCHAR) MmGetSystemAddressForMdlSafe(
-                    mdl,
-                    NormalPagePriority | MdlMappingNoExecute);
+			if (currentOffset < mdlByteCount)
+			{
+				pBuffer = (PUCHAR)MmGetSystemAddressForMdlSafe(
+					mdl,
+					NormalPagePriority | MdlMappingNoExecute);
 
-                if (pBuffer != NULL)
-                {
-                    //
-                    // Byte found, mark successful
-                    //
+				if (pBuffer != NULL)
+				{
+					//
+					// Byte found, mark successful
+					//
 
-                    *pByte = pBuffer[currentOffset];
-                    status = STATUS_SUCCESS;
-                }
+					*pByte = pBuffer[currentOffset];
+					status = STATUS_SUCCESS;
+				}
 
-                break;
-            }
+				break;
+			}
 
-            currentOffset -= mdlByteCount;
-            mdl = mdl->Next;
-        }
+			currentOffset -= mdlByteCount;
+			mdl = mdl->Next;
+		}
 
-        //
-        // If after walking the MDL the byte hasn't been found,
-        // status will still be STATUS_INFO_LENGTH_MISMATCH
-        //
-    }
+		//
+		// If after walking the MDL the byte hasn't been found,
+		// status will still be STATUS_INFO_LENGTH_MISMATCH
+		//
+	}
 
-    return status;
+	return status;
 }
 
 NTSTATUS

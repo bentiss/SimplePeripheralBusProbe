@@ -22,8 +22,11 @@ Revision History:
 #include "internal.h"
 #include "device.h"
 #include "controller.h"
+#include "peripheral.h"
 
 #include "device.tmh"
+
+#pragma warning(disable:4100)
 
 
 /////////////////////////////////////////////////
@@ -31,6 +34,305 @@ Revision History:
 // WDF and SPB DDI callbacks.
 //
 /////////////////////////////////////////////////
+
+NTSTATUS
+OnPrepareHardware(
+	_In_  WDFDEVICE     FxDevice,
+	_In_  WDFCMRESLIST  FxResourcesRaw,
+	_In_  WDFCMRESLIST  FxResourcesTranslated
+)
+/*++
+
+Routine Description:
+
+This routine caches the SPB resource connection ID.
+
+Arguments:
+
+FxDevice - a handle to the framework device object
+FxResourcesRaw - list of translated hardware resources that
+the PnP manager has assigned to the device
+FxResourcesTranslated - list of raw hardware resources that
+the PnP manager has assigned to the device
+
+Return Value:
+
+Status
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_WDFLOADING);
+
+	PPBC_DEVICE pDevice = GetDeviceContext(FxDevice);
+	BOOLEAN fSpbResourceFound = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
+
+	UNREFERENCED_PARAMETER(FxResourcesRaw);
+
+	//
+	// Parse the peripheral's resources.
+	//
+
+	ULONG resourceCount = WdfCmResourceListGetCount(FxResourcesTranslated);
+
+	for (ULONG i = 0; i < resourceCount; i++)
+	{
+		PCM_PARTIAL_RESOURCE_DESCRIPTOR pDescriptor;
+		UCHAR Class;
+		UCHAR Type;
+
+		pDescriptor = WdfCmResourceListGetDescriptor(
+			FxResourcesTranslated, i);
+
+		switch (pDescriptor->Type)
+		{
+		case CmResourceTypeConnection:
+
+			//
+			// Look for I2C or SPI resource and save connection ID.
+			//
+
+			Class = pDescriptor->u.Connection.Class;
+			Type = pDescriptor->u.Connection.Type;
+
+			if ((Class == CM_RESOURCE_CONNECTION_CLASS_SERIAL) &&
+				((Type == CM_RESOURCE_CONNECTION_TYPE_SERIAL_I2C) ||
+				(Type == CM_RESOURCE_CONNECTION_TYPE_SERIAL_SPI)))
+			{
+				if (fSpbResourceFound == FALSE)
+				{
+					pDevice->PeripheralId.LowPart =
+						pDescriptor->u.Connection.IdLowPart;
+					pDevice->PeripheralId.HighPart =
+						pDescriptor->u.Connection.IdHighPart;
+
+					fSpbResourceFound = TRUE;
+
+					Trace(
+						TRACE_LEVEL_INFORMATION,
+						TRACE_FLAG_WDFLOADING,
+						"SPB resource found with ID=0x%llx",
+						pDevice->PeripheralId.QuadPart);
+				}
+				else
+				{
+					Trace(
+						TRACE_LEVEL_WARNING,
+						TRACE_FLAG_WDFLOADING,
+						"Duplicate SPB resource found with ID=0x%llx",
+						pDevice->PeripheralId.QuadPart);
+				}
+			}
+
+			break;
+
+		default:
+
+			//
+			// Ignoring all other resource types.
+			//
+
+			break;
+		}
+	}
+
+	//
+	// An SPB resource is required.
+	//
+
+	if (fSpbResourceFound == FALSE)
+	{
+		status = STATUS_NOT_FOUND;
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_WDFLOADING,
+			"SPB resource not found - %!STATUS!",
+			status);
+	}
+
+	FuncExit(TRACE_FLAG_WDFLOADING);
+
+	return status;
+}
+
+NTSTATUS
+OnReleaseHardware(
+	_In_  WDFDEVICE     FxDevice,
+	_In_  WDFCMRESLIST  FxResourcesTranslated
+)
+/*++
+
+Routine Description:
+
+Arguments:
+
+FxDevice - a handle to the framework device object
+FxResourcesTranslated - list of raw hardware resources that
+the PnP manager has assigned to the device
+
+Return Value:
+
+Status
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_WDFLOADING);
+
+	NTSTATUS status = STATUS_SUCCESS;
+
+	UNREFERENCED_PARAMETER(FxResourcesTranslated);
+
+	FuncExit(TRACE_FLAG_WDFLOADING);
+
+	return status;
+}
+
+NTSTATUS
+OnD0Entry(
+	_In_  WDFDEVICE               FxDevice,
+	_In_  WDF_POWER_DEVICE_STATE  FxPreviousState
+)
+/*++
+
+Routine Description:
+
+This routine allocates objects needed by the driver.
+
+Arguments:
+
+FxDevice - a handle to the framework device object
+FxPreviousState - previous power state
+
+Return Value:
+
+Status
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_WDFLOADING);
+
+	UNREFERENCED_PARAMETER(FxPreviousState);
+
+	PPBC_DEVICE pDevice = GetDeviceContext(FxDevice);
+	NTSTATUS status;
+
+	//
+	// Create the SPB target.
+	//
+
+	WDF_OBJECT_ATTRIBUTES targetAttributes;
+	WDF_OBJECT_ATTRIBUTES_INIT(&targetAttributes);
+
+	status = WdfIoTargetCreate(
+		pDevice->FxDevice,
+		&targetAttributes,
+		&pDevice->TrueSpbController);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_WDFLOADING,
+			"Failed to create IO target - %!STATUS!",
+			status);
+	}
+
+	//
+	// InputMemory will be created when an SPB request is about to be
+	// sent. Indicate that it is not yet initialized.
+	//
+
+	pDevice->InputMemory = WDF_NO_HANDLE;
+
+	//
+	// Create the SPB request.
+	//
+
+	if (NT_SUCCESS(status))
+	{
+		WDF_OBJECT_ATTRIBUTES requestAttributes;
+		WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&requestAttributes, PBC_REQUEST);
+
+		status = WdfRequestCreate(
+			&requestAttributes,
+			nullptr,
+			&pDevice->SpbRequest);
+
+		if (!NT_SUCCESS(status))
+		{
+			Trace(
+				TRACE_LEVEL_ERROR,
+				TRACE_FLAG_WDFLOADING,
+				"Failed to create IO request - %!STATUS!",
+				status);
+		}
+
+		if (NT_SUCCESS(status))
+		{
+			PPBC_REQUEST pRequest = GetRequestContext(
+				pDevice->SpbRequest);
+
+			pRequest->FxDevice = pDevice->FxDevice;
+			pRequest->IsSpbSequenceRequest = FALSE;
+			pRequest->SequenceWriteLength = 0;
+		}
+	}
+
+	FuncExit(TRACE_FLAG_WDFLOADING);
+
+	return status;
+}
+
+NTSTATUS
+OnD0Exit(
+	_In_  WDFDEVICE               FxDevice,
+	_In_  WDF_POWER_DEVICE_STATE  FxPreviousState
+)
+/*++
+
+Routine Description:
+
+This routine destroys objects needed by the driver.
+
+Arguments:
+
+FxDevice - a handle to the framework device object
+FxPreviousState - previous power state
+
+Return Value:
+
+Status
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_WDFLOADING);
+
+	UNREFERENCED_PARAMETER(FxPreviousState);
+
+	PPBC_DEVICE pDevice = GetDeviceContext(FxDevice);
+
+	if (pDevice->TrueSpbController != WDF_NO_HANDLE)
+	{
+		WdfObjectDelete(pDevice->TrueSpbController);
+		pDevice->TrueSpbController = WDF_NO_HANDLE;
+	}
+
+	if (pDevice->SpbRequest != WDF_NO_HANDLE)
+	{
+		WdfObjectDelete(pDevice->SpbRequest);
+		pDevice->SpbRequest = WDF_NO_HANDLE;
+	}
+
+	if (pDevice->InputMemory != WDF_NO_HANDLE)
+	{
+		WdfObjectDelete(pDevice->InputMemory);
+		pDevice->InputMemory = WDF_NO_HANDLE;
+	}
+
+	FuncExit(TRACE_FLAG_WDFLOADING);
+
+	return STATUS_SUCCESS;
+}
 
 NTSTATUS
 OnTargetConnect(
@@ -102,10 +404,57 @@ OnTargetConnect(
             pTarget->Settings.Address,
             pDevice->FxDevice);
     }
-    
-    FuncExit(TRACE_FLAG_SPBDDI);
+
+	status = SpbPeripheralOpen(pDevice);
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBDDI,
+			"Can't open the underlying device -  %!STATUS!",
+			status);
+	}
+
+	FuncExit(TRACE_FLAG_SPBDDI);
 
     return status;
+}
+
+VOID
+OnTargetDisconnect(
+	_In_ WDFDEVICE SpbController,
+	_In_  SPBTARGET   SpbTarget
+)
+/*++
+
+Routine Description:
+
+This routine is invoked whenever a peripheral driver closes
+a target.
+
+Arguments:
+
+SpbController - a handle to the framework device object
+representing an SPB controller
+SpbTarget - a handle to the SPBTARGET object
+
+Return Value:
+
+None
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_SPBDDI);
+
+	PPBC_DEVICE pDevice = GetDeviceContext(SpbController);
+	PPBC_TARGET pTarget = GetTargetContext(SpbTarget);
+
+	NT_ASSERT(pDevice != NULL);
+	NT_ASSERT(pTarget != NULL);
+
+	SpbPeripheralClose(pDevice);
+
+	FuncExit(TRACE_FLAG_SPBDDI);
 }
 
 VOID
@@ -569,7 +918,7 @@ OnOtherInCallerContext(
 
 --*/
 {
-    FuncEntry(TRACE_FLAG_SPBDDI);
+    //FuncEntry(TRACE_FLAG_SPBDDI);
 
     NTSTATUS status;
 
@@ -641,7 +990,7 @@ exit:
         WdfRequestComplete(FxRequest, status);
     }
     
-    FuncExit(TRACE_FLAG_SPBDDI);
+    //FuncExit(TRACE_FLAG_SPBDDI);
 }
 
 VOID
@@ -680,7 +1029,7 @@ OnOther(
 {
     FuncEntry(TRACE_FLAG_SPBDDI);
     
-    NTSTATUS status = STATUS_SUCCESS;
+    NTSTATUS status = STATUS_NOT_SUPPORTED;
 
     UNREFERENCED_PARAMETER(SpbController);
     UNREFERENCED_PARAMETER(SpbTarget);
@@ -688,6 +1037,47 @@ OnOther(
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(InputBufferLength);
     UNREFERENCED_PARAMETER(IoControlCode);
+
+
+	if (IoControlCode == IOCTL_SPB_FULL_DUPLEX)
+	{
+		PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
+
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBDDI,
+			"Received Full Duplex SpbRequest %p in: %lu out: %lu",
+			SpbRequest,
+			(unsigned long)InputBufferLength,
+			(unsigned long)OutputBufferLength
+		);
+
+		if (InputBufferLength && OutputBufferLength)
+		{
+			SpbPeripheralFullDuplex(pDevice, SpbRequest);
+		}
+		else if (OutputBufferLength)
+		{
+			SpbPeripheralWrite(pDevice, SpbRequest, WdfTrue);
+			//SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
+		}
+		else
+		{
+			SpbPeripheralRead(pDevice, SpbRequest, WdfTrue);
+			//SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
+		}
+		status = STATUS_SUCCESS;
+	} 
+	else
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBDDI,
+			"Received Other SpbRequest %p ControlCode: %d",
+			SpbRequest,
+			IoControlCode
+		);
+	}
 
     //
     // TODO: the driver should take the following steps
@@ -708,12 +1098,10 @@ OnOther(
     //       and program the hardware for the transfer.
     //
 
-
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. Note this must be done outside
-    //       of any locked code.
-    SpbRequestComplete(SpbRequest, status);
+	if (!NT_SUCCESS(status))
+	{
+		SpbRequestComplete(SpbRequest, status);
+	}
     
     FuncExit(TRACE_FLAG_SPBDDI);
 }
@@ -1136,96 +1524,119 @@ exit:
 
 NTSTATUS
 PbcTargetGetSettings(
-    _In_  PPBC_DEVICE                pDevice,
-    _In_  PVOID                      ConnectionParameters,
-    _Out_ PPBC_TARGET_SETTINGS       pSettings
-    )
+	_In_  PPBC_DEVICE                pDevice,
+	_In_  PVOID                      ConnectionParameters,
+	_Out_ PPBC_TARGET_SETTINGS       pSettings
+)
 /*++
- 
+
   Routine Description:
 
-    This routine populates the target's settings.
+	This routine populates the target's settings.
 
   Arguments:
 
-    pDevice - a pointer to the PBC device context
-    ConnectionParameters - a pointer to a blob containing the 
-        connection parameters
-    Settings - a pointer the the target's settings
+	pDevice - a pointer to the PBC device context
+	ConnectionParameters - a pointer to a blob containing the
+		connection parameters
+	Settings - a pointer the the target's settings
 
   Return Value:
 
-    Status
+	Status
 
 --*/
 {
-    FuncEntry(TRACE_FLAG_PBCLOADING);
+	FuncEntry(TRACE_FLAG_PBCLOADING);
 
-    UNREFERENCED_PARAMETER(pDevice);
+	UNREFERENCED_PARAMETER(pDevice);
+	NTSTATUS status = STATUS_INVALID_PARAMETER;
 
-    NT_ASSERT(ConnectionParameters != nullptr);
-    NT_ASSERT(pSettings != nullptr);
+	NT_ASSERT(ConnectionParameters != nullptr);
+	NT_ASSERT(pSettings != nullptr);
 
-    PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER connection;
-    PPNP_SERIAL_BUS_DESCRIPTOR descriptor;
-    PPNP_I2C_SERIAL_BUS_DESCRIPTOR i2cDescriptor;
+	PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER connection;
+	PPNP_SERIAL_BUS_DESCRIPTOR descriptor;
+	PPNP_I2C_SERIAL_BUS_DESCRIPTOR i2cDescriptor;
+	PPNP_SPI_SERIAL_BUS_DESCRIPTOR spiDescriptor;
 
-    connection = (PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER)
-        ConnectionParameters;
+	connection = (PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER)
+		ConnectionParameters;
 
-    if (connection->PropertiesLength < sizeof(PNP_SERIAL_BUS_DESCRIPTOR))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_PBCLOADING,
-            "Invalid connection properties (length = %lu, "
-            "expected = %Iu)",
-            connection->PropertiesLength,
-            sizeof(PNP_SERIAL_BUS_DESCRIPTOR));
+	if (connection->PropertiesLength < sizeof(PNP_SERIAL_BUS_DESCRIPTOR))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_PBCLOADING,
+			"Invalid connection properties (length = %lu, "
+			"expected = %Iu)",
+			connection->PropertiesLength,
+			sizeof(PNP_SERIAL_BUS_DESCRIPTOR));
 
-        return STATUS_INVALID_PARAMETER;
-    }
+		return STATUS_INVALID_PARAMETER;
+	}
 
-    descriptor = (PPNP_SERIAL_BUS_DESCRIPTOR)
-        connection->ConnectionProperties;
+	descriptor = (PPNP_SERIAL_BUS_DESCRIPTOR)
+		connection->ConnectionProperties;
 
-    if (descriptor->SerialBusType != I2C_SERIAL_BUS_TYPE)
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_PBCLOADING,
-            "Bus type %c not supported, only I2C",
-            descriptor->SerialBusType);
+	if (descriptor->SerialBusType == I2C_SERIAL_BUS_TYPE)
+	{
+		i2cDescriptor = (PPNP_I2C_SERIAL_BUS_DESCRIPTOR)
+			connection->ConnectionProperties;
 
-        return STATUS_INVALID_PARAMETER;
-    }
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			TRACE_FLAG_PBCLOADING,
+			"I2C Connection Descriptor %p "
+			"ConnectionSpeed:%lu "
+			"Address:0x%hx",
+			i2cDescriptor,
+			i2cDescriptor->ConnectionSpeed,
+			i2cDescriptor->SlaveAddress);
 
-    i2cDescriptor = (PPNP_I2C_SERIAL_BUS_DESCRIPTOR)
-        connection->ConnectionProperties;
+		// Target address
+		pSettings->Address = (ULONG)i2cDescriptor->SlaveAddress;
 
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_PBCLOADING,
-        "I2C Connection Descriptor %p "
-        "ConnectionSpeed:%lu "
-        "Address:0x%hx",
-        i2cDescriptor,
-        i2cDescriptor->ConnectionSpeed,
-        i2cDescriptor->SlaveAddress);
+		// Address mode
+		USHORT i2cFlags = i2cDescriptor->SerialBusDescriptor.TypeSpecificFlags;
+		pSettings->AddressMode =
+			((i2cFlags & I2C_SERIAL_BUS_SPECIFIC_FLAG_10BIT_ADDRESS) == 0) ?
+			AddressMode7Bit : AddressMode10Bit;
 
-    // Target address
-    pSettings->Address = (ULONG)i2cDescriptor->SlaveAddress;
+		// Clock speed
+		pSettings->ConnectionSpeed = i2cDescriptor->ConnectionSpeed;
+		status = STATUS_SUCCESS;
+	}
 
-    // Address mode
-    USHORT i2cFlags = i2cDescriptor->SerialBusDescriptor.TypeSpecificFlags;
-    pSettings->AddressMode = 
-        ((i2cFlags & I2C_SERIAL_BUS_SPECIFIC_FLAG_10BIT_ADDRESS) == 0) ? 
-            AddressMode7Bit : AddressMode10Bit;
+	if (descriptor->SerialBusType == SPI_SERIAL_BUS_TYPE)
+	{
+		spiDescriptor = (PPNP_SPI_SERIAL_BUS_DESCRIPTOR)
+			connection->ConnectionProperties;
 
-    // Clock speed
-    pSettings->ConnectionSpeed = i2cDescriptor->ConnectionSpeed;
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			TRACE_FLAG_PBCLOADING,
+			"SPI Connection Descriptor %p "
+			"ConnectionSpeed:%lu ",
+			spiDescriptor,
+			spiDescriptor->ConnectionSpeed
+		);
 
-    FuncExit(TRACE_FLAG_PBCLOADING);
+		// Clock speed
+		pSettings->ConnectionSpeed = spiDescriptor->ConnectionSpeed;
+		status = STATUS_SUCCESS;
+	}
+
+	if (status == STATUS_INVALID_PARAMETER)
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_PBCLOADING,
+			"Bus type %c not supported, only I2C or SPI",
+			descriptor->SerialBusType);
+	}
+
+	FuncExit(TRACE_FLAG_PBCLOADING);
 
     return STATUS_SUCCESS;
 }
