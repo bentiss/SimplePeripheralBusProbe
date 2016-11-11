@@ -86,9 +86,11 @@ OnDriverCleanup(
     _In_ WDFOBJECT Object
     )
 {
+	FuncEntry(TRACE_FLAG_WDFLOADING);
     UNREFERENCED_PARAMETER(Object);
 
-    WPP_CLEANUP(NULL);
+	FuncExit(TRACE_FLAG_WDFLOADING);
+	WPP_CLEANUP(NULL);
 }
 
 NTSTATUS
