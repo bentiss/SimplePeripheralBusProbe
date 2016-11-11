@@ -214,7 +214,7 @@ OnDeviceAdd(
         //
 
         spbConfig.ControllerDispatchType = WdfIoQueueDispatchSequential;
-        spbConfig.PowerManaged           = WdfTrue;
+        spbConfig.PowerManaged           = WdfFalse;
         spbConfig.EvtSpbIoRead           = OnRead;
         spbConfig.EvtSpbIoWrite          = OnWrite;
         spbConfig.EvtSpbIoSequence       = OnSequence;
