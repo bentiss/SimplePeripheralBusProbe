@@ -26,12 +26,6 @@ Revision History:
 // Controller specific function prototypes.
 //
 
-VOID ControllerInitialize(
-    _In_  PPBC_DEVICE   pDevice);
-
-VOID ControllerUninitialize(
-    _In_  PPBC_DEVICE   pDevice);
-
 VOID
 ControllerConfigureForTransfer(
     _In_  PPBC_DEVICE   pDevice,
