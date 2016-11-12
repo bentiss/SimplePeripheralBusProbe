@@ -106,9 +106,6 @@ typedef struct _PNP_SPI_SERIAL_BUS_DESCRIPTOR {
 // Power settings.
 //
 
-#define MONITOR_POWER_ON         1
-#define MONITOR_POWER_OFF        0
-
 #define IDLE_TIMEOUT_MONITOR_ON  2000
 #define IDLE_TIMEOUT_MONITOR_OFF 50
 
@@ -135,31 +132,6 @@ typedef struct PBC_TARGET_SETTINGS
     ULONG                         ConnectionSpeed;
 }
 PBC_TARGET_SETTINGS, *PPBC_TARGET_SETTINGS;
-
-
-//
-// Transfer settings. 
-//
-
-typedef enum BUS_CONDITION
-{
-    BusConditionFree,
-    BusConditionBusy,
-    BusConditionDontCare
-}
-BUS_CONDITION, *PBUS_CONDITION;
-
-typedef struct PBC_TRANSFER_SETTINGS
-{
-    // TODO: Update this structure to include other
-    //       settings needed to configure the controller 
-    //       for a specific transfer.
-
-    BUS_CONDITION                  BusCondition;
-    BOOLEAN                        IsStart;
-    BOOLEAN                        IsEnd;
-}
-PBC_TRANSFER_SETTINGS, *PPBC_TRANSFER_SETTINGS;
 
 /////////////////////////////////////////////////
 //
