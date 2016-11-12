@@ -177,9 +177,6 @@ typedef struct PBC_REQUEST  PBC_REQUEST,  *PPBC_REQUEST;
 
 struct PBC_DEVICE 
 {
-    // TODO: Update this structure with variables that 
-    //       need to be stored in the device context.
-
     // Handle to the WDF device.
     WDFDEVICE                      FxDevice;
 
@@ -230,9 +227,6 @@ struct PBC_DEVICE
 
 struct PBC_TARGET 
 {
-    // TODO: Update this structure with variables that 
-    //       need to be stored in the target context.
-
     // Handle to the SPB target.
     SPBTARGET                      SpbTarget;
 
@@ -252,9 +246,6 @@ struct PBC_TARGET
 
 struct PBC_REQUEST
 {
-    // TODO: Update this structure with variables that 
-    //       need to be stored in the request context.
-
 	//
 	// Associated framework device object
 	//
@@ -270,49 +261,6 @@ struct PBC_REQUEST
     // Handle to the SPB request.
     SPBREQUEST                     SpbRequest;
 
-    // SPB request type.
-    SPB_REQUEST_TYPE               Type;
-
-    // Number of transfers in sequence and 
-    // index of the current one.
-    ULONG                          TransferCount; 
-    ULONG                          TransferIndex;
-
-    // Total bytes transferred.
-    size_t                         TotalInformation;
-
-    // Current status of the request.
-    NTSTATUS                       Status;
-    BOOLEAN                        bIoComplete;
-
-
-    //
-    // Variables that are reused for each transfer within
-    // a [sequence] request.
-    //
-
-    // Pointer to the transfer buffer and length.
-    size_t                         Length;
-    PMDL                           pMdlChain;
-
-    // Position of the current transfer within
-    // the sequence and its associated controller
-    // settings.
-    SPB_REQUEST_SEQUENCE_POSITION  SequencePosition;
-    PBC_TRANSFER_SETTINGS          Settings;
-
-    // Direction of the current transfer.
-    SPB_TRANSFER_DIRECTION         Direction;
-
-    // Time to delay before starting transfer.
-    ULONG                          DelayInUs;
-
-    // Interrupt flag indicating data is ready to
-    // be transferred.
-    ULONG                          DataReadyFlag; 
-
-    // Bytes read/written in the current transfer.
-    size_t                         Information;
 };
 
 //

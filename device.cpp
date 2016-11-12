@@ -685,9 +685,7 @@ OnSequence(
     NT_ASSERT(pDevice  != NULL);
     NT_ASSERT(pTarget  != NULL);
     NT_ASSERT(pRequest != NULL);
-    
-    NTSTATUS status = STATUS_SUCCESS;
-    
+        
     //
     // Get request parameters.
     //
@@ -699,43 +697,17 @@ OnSequence(
     NT_ASSERT(params.Position == SpbRequestSequencePositionSingle);
     NT_ASSERT(params.Type == SpbRequestTypeSequence);
 
-    //
-    // Initialize request context.
-    //
-    
-    pRequest->SpbRequest = SpbRequest;
-    pRequest->Type = params.Type;
-    pRequest->TotalInformation = 0;
-    pRequest->TransferCount = TransferCount;
-    pRequest->TransferIndex = 0;
-    pRequest->bIoComplete = FALSE;
-
     Trace(
         TRACE_LEVEL_INFORMATION,
         TRACE_FLAG_SPBDDI,
         "Received sequence request %p with transfer count %d for SPBTARGET %p "
         "(WDFDEVICE %p)",
-        pRequest->SpbRequest,
-        pRequest->TransferCount,
+        SpbRequest,
+        TransferCount,
         SpbTarget,
         SpbController);
 
-	status = STATUS_NOT_SUPPORTED;
-
-//exit:
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBDDI,
-            "Error configuring sequence, completing "
-            "SPBREQUEST %p synchronously - %!STATUS!", 
-            pRequest->SpbRequest,
-            status);
-
-        SpbRequestComplete(SpbRequest, status);
-    }
+	SpbPeripheralSequence(pDevice, SpbRequest, TransferCount);
     
     FuncExit(TRACE_FLAG_SPBDDI);
 }

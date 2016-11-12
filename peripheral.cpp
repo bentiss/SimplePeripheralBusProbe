@@ -742,261 +742,52 @@ SpbPeripheralWrite(
 }
 
 VOID
-SpbPeripheralWriteRead(
-    _In_  PPBC_DEVICE       pDevice,
-    _In_   SPBREQUEST       spbRequest
-    )
-/*++
- 
-  Routine Description:
-
-    This routine sends a write-read sequence to the SPB controller.
-
-  Arguments:
-
-    pDevice - a pointer to the device context
-    spbRequest - the framework request object
-
-  Return Value:
-
-    None
-
---*/
-{
-    FuncEntry(TRACE_FLAG_SPBAPI);
-
-    UNREFERENCED_PARAMETER(spbRequest);
-
-    PVOID pInputBuffer = nullptr;
-    PVOID pOutputBuffer = nullptr;
-    size_t inputBufferLength = 0;
-    size_t outputBufferLength = 0;
-    WDF_OBJECT_ATTRIBUTES attributes;
-	PPBC_REQUEST pRequest;
-    NTSTATUS status;
-
-    pRequest = GetRequestContext(pDevice->SpbRequest);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBAPI,
-        "Formatting SPB request %p for IOCTL_SPB_EXECUTE_SEQUENCE",
-        pDevice->SpbRequest);
-        
-    //
-    // Save the client request.
-    //
-
-    pDevice->ClientRequest = spbRequest;
-
-    //
-    // Get input and output buffers.
-    //
-
-    status = WdfRequestRetrieveInputBuffer(
-        spbRequest,
-        0,
-        &pInputBuffer,
-        &inputBufferLength);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to retrieve input buffer - %!STATUS!",
-            status);
-
-        goto Done;
-    }
-
-    status = WdfRequestRetrieveOutputBuffer(
-        spbRequest,
-        0,
-        &pOutputBuffer,
-        &outputBufferLength);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to retrieve output buffer - %!STATUS!",
-            status);
-
-        goto Done;
-    }
-
-    //
-    // Build SPB sequence.
-    //
-    
-    const ULONG transfers = 2;
-
-    SPB_TRANSFER_LIST_AND_ENTRIES(transfers) seq;
-    SPB_TRANSFER_LIST_INIT(&(seq.List), transfers);
-
-    {
-        //
-        // PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
-        // "struct hack" size but using an index variable quiets 
-        // the warning. This is a false positive from OACR.
-        // 
-
-        ULONG index = 0;
-        seq.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
-            SpbTransferDirectionToDevice,
-            0,
-            pInputBuffer,
-            (ULONG)inputBufferLength);
-
-        seq.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
-            SpbTransferDirectionFromDevice,
-            0,
-            pOutputBuffer,
-            (ULONG)outputBufferLength);
-    }
-
-    //
-    // Create preallocated WDFMEMORY. The IOCTL is METHOD_BUFFERED,
-    // so the memory doesn't have to persist until the request is
-    // completed.
-    //
-
-    NT_ASSERT(pDevice->InputMemory == WDF_NO_HANDLE);
-
-    WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
-
-    status = WdfMemoryCreatePreallocated(
-        &attributes,
-        (PVOID)&seq,
-        sizeof(seq),
-        &pDevice->InputMemory);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to create WDFMEMORY - %!STATUS!",
-            status);
-
-        goto Done;
-    }
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBAPI,
-        "Built write-read sequence %p with byte length=%lu",
-        &seq,
-        (ULONG)(inputBufferLength + outputBufferLength));
-
-    //
-    // Send sequence IOCTL.
-    //
-
-    //
-    // Format and send the SPB sequence request.
-    //
-
-    status = WdfIoTargetFormatRequestForIoctl(
-        pDevice->TrueSpbController,
-        pDevice->SpbRequest,
-        IOCTL_SPB_EXECUTE_SEQUENCE,
-        pDevice->InputMemory,
-        nullptr,
-        nullptr,
-        nullptr);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to format request - %!STATUS!",
-            status);
-
-        goto Done;
-    }
-
-    status = SpbPeripheralSendRequest(
-        pDevice,
-        pDevice->SpbRequest,
-        spbRequest);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to send SPB request %p for "
-            "IOCTL_SPB_EXECUTE_SEQUENCE - %!STATUS!",
-            pDevice->SpbRequest,
-            status);
-
-        goto Done;
-    }
-
-Done:
-
-    if (!NT_SUCCESS(status))
-    {
-        SpbPeripheralCompleteRequestPair(
-            pDevice,
-            status,
-            0);
-    }
-
-    FuncExit(TRACE_FLAG_SPBAPI);
-}
-
-VOID
 SpbPeripheralFullDuplex(
-    _In_  PPBC_DEVICE       pDevice,
-    _In_  SPBREQUEST        spbRequest
-	)
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest
+)
 /*++
- 
-  Routine Description:
 
-    This routine sends a full duplex transfer to the SPB controller.
+Routine Description:
 
-  Arguments:
+This routine sends a full duplex transfer to the SPB controller.
 
-    pDevice - a pointer to the device context
-    spbRequest - the framework request object
+Arguments:
 
-  Return Value:
+pDevice - a pointer to the device context
+spbRequest - the framework request object
 
-    None
+Return Value:
+
+None
 
 --*/
 {
-    FuncEntry(TRACE_FLAG_SPBAPI);
+	FuncEntry(TRACE_FLAG_SPBAPI);
 
 	UNREFERENCED_PARAMETER(spbRequest);
 
-    WDF_OBJECT_ATTRIBUTES attributes;
-    PPBC_REQUEST pRequest;
-    NTSTATUS status;
+	WDF_OBJECT_ATTRIBUTES attributes;
+	PPBC_REQUEST pRequest;
+	NTSTATUS status;
 
-    pRequest = GetRequestContext(pDevice->SpbRequest);
+	pRequest = GetRequestContext(pDevice->SpbRequest);
 
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBAPI,
-        "Formatting SPB request %p for IOCTL_SPB_FULL_DUPLEX",
-        pDevice->SpbRequest);
-        
-    //
-    // Save the client request.
-    //
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Formatting SPB request %p for IOCTL_SPB_FULL_DUPLEX",
+		pDevice->SpbRequest);
 
-    pDevice->ClientRequest = spbRequest;
+	//
+	// Save the client request.
+	//
 
-    //
-    // Get input and output buffers.
-    //
+	pDevice->ClientRequest = spbRequest;
+
+	//
+	// Get input and output buffers.
+	//
 
 	const ULONG fullDuplexWriteIndex = 0;
 	const ULONG fullDuplexReadIndex = 1;
@@ -1021,23 +812,23 @@ SpbPeripheralFullDuplex(
 		&readDescriptor,
 		&pReadMdl);
 
-    //
-    // Build full duplex transfer using SPB transfer list.
-    //
-    
-    const ULONG transfers = 2;
+	//
+	// Build full duplex transfer using SPB transfer list.
+	//
 
-    SPB_TRANSFER_LIST_AND_ENTRIES(transfers) seq;
-    SPB_TRANSFER_LIST_INIT(&(seq.List), transfers);
+	const ULONG transfers = 2;
 
-    {
-        //
-        // PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
-        // "struct hack" size but using an index variable quiets 
-        // the warning. This is a false positive from OACR.
-        // 
+	SPB_TRANSFER_LIST_AND_ENTRIES(transfers) seq;
+	SPB_TRANSFER_LIST_INIT(&(seq.List), transfers);
 
-        const ULONG index = 0;
+	{
+		//
+		// PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
+		// "struct hack" size but using an index variable quiets 
+		// the warning. This is a false positive from OACR.
+		// 
+
+		const ULONG index = 0;
 
 		seq.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
 			SpbTransferDirectionToDevice,
@@ -1048,99 +839,517 @@ SpbPeripheralFullDuplex(
 			SpbTransferDirectionFromDevice,
 			0,
 			pReadMdl);
-    }
+	}
 
-    //
-    // Create preallocated WDFMEMORY. The IOCTL is METHOD_BUFFERED,
-    // so the memory doesn't have to persist until the request is
-    // completed.
-    //
+	//
+	// Create preallocated WDFMEMORY. The IOCTL is METHOD_BUFFERED,
+	// so the memory doesn't have to persist until the request is
+	// completed.
+	//
 
-    NT_ASSERT(pDevice->InputMemory == WDF_NO_HANDLE);
+	NT_ASSERT(pDevice->InputMemory == WDF_NO_HANDLE);
 
-    WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
 
-    status = WdfMemoryCreatePreallocated(
-        &attributes,
-        (PVOID)&seq,
-        sizeof(seq),
-        &pDevice->InputMemory);
+	status = WdfMemoryCreatePreallocated(
+		&attributes,
+		(PVOID)&seq,
+		sizeof(seq),
+		&pDevice->InputMemory);
 
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to create WDFMEMORY - %!STATUS!",
-            status);
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to create WDFMEMORY - %!STATUS!",
+			status);
 
-        goto Done;
-    }
+		goto Done;
+	}
 
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBAPI,
-        "Built full duplex transfer %p with byte length=%lu",
-        &seq,
-        (ULONG)(writeDescriptor.TransferLength + readDescriptor.TransferLength));
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Built full duplex transfer %p with byte length=%lu",
+		&seq,
+		(ULONG)(writeDescriptor.TransferLength + readDescriptor.TransferLength));
 
-    //
-    // Send full duplex IOCTL.
-    //
+	//
+	// Send full duplex IOCTL.
+	//
 
-    //
-    // Format and send the full duplex request.
-    //
+	//
+	// Format and send the full duplex request.
+	//
 
-    status = WdfIoTargetFormatRequestForIoctl(
-        pDevice->TrueSpbController,
-        pDevice->SpbRequest,
-        IOCTL_SPB_FULL_DUPLEX,
-        pDevice->InputMemory,
-        nullptr,
-        nullptr,
-        nullptr);
+	status = WdfIoTargetFormatRequestForIoctl(
+		pDevice->TrueSpbController,
+		pDevice->SpbRequest,
+		IOCTL_SPB_FULL_DUPLEX,
+		pDevice->InputMemory,
+		nullptr,
+		nullptr,
+		nullptr);
 
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to format request - %!STATUS!",
-            status);
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to format request - %!STATUS!",
+			status);
 
-        goto Done;
-    }
+		goto Done;
+	}
 
-    status = SpbPeripheralSendRequest(
-        pDevice,
-        pDevice->SpbRequest,
+	status = SpbPeripheralSendRequest(
+		pDevice,
+		pDevice->SpbRequest,
 		spbRequest);
 
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR,
-            TRACE_FLAG_SPBAPI,
-            "Failed to send SPB request %p for "
-            "IOCTL_SPB_FULL_DUPLEX - %!STATUS!",
-            pDevice->SpbRequest,
-            status);
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to send SPB request %p for "
+			"IOCTL_SPB_FULL_DUPLEX - %!STATUS!",
+			pDevice->SpbRequest,
+			status);
 
-        goto Done;
-    }
+		goto Done;
+	}
 
 Done:
 
 	if (!NT_SUCCESS(status))
-    {
-        SpbPeripheralCompleteRequestPair(
-            pDevice,
-            status,
-            0);
-    }
+	{
+		SpbPeripheralCompleteRequestPair(
+			pDevice,
+			status,
+			0);
+	}
 
-    FuncExit(TRACE_FLAG_SPBAPI);
+	FuncExit(TRACE_FLAG_SPBAPI);
+}
+
+NTSTATUS
+SpbPeripheralSequence1(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest
+)
+/*++
+
+Routine Description:
+
+This routine sends a sequence of 1 transfer to the SPB controller.
+
+Arguments:
+
+pDevice - a pointer to the device context
+spbRequest - the framework request object
+
+Return Value:
+
+None
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_SPBAPI);
+
+	UNREFERENCED_PARAMETER(spbRequest);
+
+	WDF_OBJECT_ATTRIBUTES attributes;
+	PPBC_REQUEST pRequest;
+	NTSTATUS status;
+
+	pRequest = GetRequestContext(pDevice->SpbRequest);
+
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Formatting SPB request %p for IOCTL_SPB_EXECUTE_SEQUENCE",
+		pDevice->SpbRequest);
+
+	//
+	// Save the client request.
+	//
+
+	pDevice->ClientRequest = spbRequest;
+
+	//
+	// Get buffer.
+	//
+
+	SPB_TRANSFER_DESCRIPTOR firstDescriptor;
+	PMDL pFirstMdl;
+
+	SPB_TRANSFER_DESCRIPTOR_INIT(&firstDescriptor);
+
+	SpbRequestGetTransferParameters(
+		spbRequest,
+		0,
+		&firstDescriptor,
+		&pFirstMdl);
+
+	//
+	// Build full duplex transfer using SPB transfer list.
+	//
+
+	const ULONG transfers = 2;
+
+	SPB_TRANSFER_LIST seq;
+	SPB_TRANSFER_LIST_INIT(&seq, 1);
+
+	{
+		//
+		// PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
+		// "struct hack" size but using an index variable quiets 
+		// the warning. This is a false positive from OACR.
+		// 
+
+		const ULONG index = 0;
+
+		seq.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
+			firstDescriptor.Direction,
+			0,
+			pFirstMdl);
+	}
+
+	//
+	// Create preallocated WDFMEMORY. The IOCTL is METHOD_BUFFERED,
+	// so the memory doesn't have to persist until the request is
+	// completed.
+	//
+
+	NT_ASSERT(pDevice->InputMemory == WDF_NO_HANDLE);
+
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+
+	status = WdfMemoryCreatePreallocated(
+		&attributes,
+		(PVOID)&seq,
+		sizeof(seq),
+		&pDevice->InputMemory);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to create WDFMEMORY - %!STATUS!",
+			status);
+
+		goto Done;
+	}
+
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Built sequence transfer %p with byte length=%lu",
+		&seq,
+		(ULONG)(firstDescriptor.TransferLength));
+
+	//
+	// Send full duplex IOCTL.
+	//
+
+	//
+	// Format and send the full duplex request.
+	//
+
+	status = WdfIoTargetFormatRequestForIoctl(
+		pDevice->TrueSpbController,
+		pDevice->SpbRequest,
+		IOCTL_SPB_EXECUTE_SEQUENCE,
+		pDevice->InputMemory,
+		nullptr,
+		nullptr,
+		nullptr);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to format request - %!STATUS!",
+			status);
+
+		goto Done;
+	}
+
+	status = SpbPeripheralSendRequest(
+		pDevice,
+		pDevice->SpbRequest,
+		spbRequest);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to send SPB request %p for "
+			"IOCTL_SPB_EXECUTE_SEQUENCE - %!STATUS!",
+			pDevice->SpbRequest,
+			status);
+
+		goto Done;
+	}
+
+Done:
+
+	FuncExit(TRACE_FLAG_SPBAPI);
+
+	return status;
+}
+
+NTSTATUS
+SpbPeripheralSequence2(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest
+)
+/*++
+
+Routine Description:
+
+This routine sends a sequence of 2 transfers to the SPB controller.
+
+Arguments:
+
+pDevice - a pointer to the device context
+spbRequest - the framework request object
+
+Return Value:
+
+None
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_SPBAPI);
+
+	UNREFERENCED_PARAMETER(spbRequest);
+
+	WDF_OBJECT_ATTRIBUTES attributes;
+	PPBC_REQUEST pRequest;
+	NTSTATUS status;
+
+	pRequest = GetRequestContext(pDevice->SpbRequest);
+
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Formatting SPB request %p for IOCTL_SPB_EXECUTE_SEQUENCE",
+		pDevice->SpbRequest);
+
+	//
+	// Save the client request.
+	//
+
+	pDevice->ClientRequest = spbRequest;
+
+	//
+	// Get input and output buffers.
+	//
+
+	SPB_TRANSFER_DESCRIPTOR firstDescriptor;
+	SPB_TRANSFER_DESCRIPTOR secondDescriptor;
+	PMDL pFirstMdl;
+	PMDL pSecondMdl;
+
+	SPB_TRANSFER_DESCRIPTOR_INIT(&firstDescriptor);
+	SPB_TRANSFER_DESCRIPTOR_INIT(&secondDescriptor);
+
+	SpbRequestGetTransferParameters(
+		spbRequest,
+		0,
+		&firstDescriptor,
+		&pFirstMdl);
+
+	SpbRequestGetTransferParameters(
+		spbRequest,
+		1,
+		&secondDescriptor,
+		&pSecondMdl);
+
+	//
+	// Build full duplex transfer using SPB transfer list.
+	//
+
+	const ULONG transfers = 2;
+
+	SPB_TRANSFER_LIST_AND_ENTRIES(transfers) seq;
+	SPB_TRANSFER_LIST_INIT(&(seq.List), transfers);
+
+	{
+		//
+		// PreFAST cannot figure out the SPB_TRANSFER_LIST_ENTRY
+		// "struct hack" size but using an index variable quiets 
+		// the warning. This is a false positive from OACR.
+		// 
+
+		const ULONG index = 0;
+
+		seq.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
+			firstDescriptor.Direction,
+			0,
+			pFirstMdl);
+
+		seq.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
+			secondDescriptor.Direction,
+			0,
+			pSecondMdl);
+	}
+
+	//
+	// Create preallocated WDFMEMORY. The IOCTL is METHOD_BUFFERED,
+	// so the memory doesn't have to persist until the request is
+	// completed.
+	//
+
+	NT_ASSERT(pDevice->InputMemory == WDF_NO_HANDLE);
+
+	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+
+	status = WdfMemoryCreatePreallocated(
+		&attributes,
+		(PVOID)&seq,
+		sizeof(seq),
+		&pDevice->InputMemory);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to create WDFMEMORY - %!STATUS!",
+			status);
+
+		goto Done;
+	}
+
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBAPI,
+		"Built sequence transfer %p with byte length=%lu",
+		&seq,
+		(ULONG)(firstDescriptor.TransferLength + secondDescriptor.TransferLength));
+
+	//
+	// Send full duplex IOCTL.
+	//
+
+	//
+	// Format and send the full duplex request.
+	//
+
+	status = WdfIoTargetFormatRequestForIoctl(
+		pDevice->TrueSpbController,
+		pDevice->SpbRequest,
+		IOCTL_SPB_EXECUTE_SEQUENCE,
+		pDevice->InputMemory,
+		nullptr,
+		nullptr,
+		nullptr);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to format request - %!STATUS!",
+			status);
+
+		goto Done;
+	}
+
+	status = SpbPeripheralSendRequest(
+		pDevice,
+		pDevice->SpbRequest,
+		spbRequest);
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to send SPB request %p for "
+			"IOCTL_SPB_EXECUTE_SEQUENCE - %!STATUS!",
+			pDevice->SpbRequest,
+			status);
+
+		goto Done;
+	}
+
+Done:
+
+	FuncExit(TRACE_FLAG_SPBAPI);
+
+	return status;
+}
+
+VOID
+SpbPeripheralSequence(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest,
+	_In_  ULONG             TransferCount
+)
+/*++
+
+Routine Description:
+
+This routine sends a sequence of 2 transfers to the SPB controller.
+
+Arguments:
+
+pDevice - a pointer to the device context
+spbRequest - the framework request object
+TransferCount - the transfer count
+
+Return Value:
+
+None
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_SPBAPI);
+
+	NTSTATUS status = STATUS_NOT_SUPPORTED;
+
+	switch (TransferCount)
+	{
+	case 1:
+		status = SpbPeripheralSequence1(pDevice, spbRequest);
+		break;
+	case 2:
+		status = SpbPeripheralSequence2(pDevice, spbRequest);
+		break;
+	}
+
+	if (!NT_SUCCESS(status))
+	{
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"Failed to send SPB request %p for "
+			"IOCTL_SPB_FULL_DUPLEX - %!STATUS!",
+			pDevice->SpbRequest,
+			status);
+
+		goto Done;
+	}
+
+Done:
+
+	if (!NT_SUCCESS(status))
+	{
+		SpbPeripheralCompleteRequestPair(
+			pDevice,
+			status,
+			0);
+	}
+
+	FuncExit(TRACE_FLAG_SPBAPI);
 }
 
 NTSTATUS

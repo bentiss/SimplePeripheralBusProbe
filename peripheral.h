@@ -68,14 +68,25 @@ SpbPeripheralWrite(
 	_In_  BOOLEAN           FullDuplex);
 
 VOID
-SpbPeripheralWriteRead(
-    _In_  PPBC_DEVICE       pDevice,
-    _In_   SPBREQUEST       spbRequest);
-
-VOID
 SpbPeripheralFullDuplex(
     _In_  PPBC_DEVICE       pDevice,
     _In_  SPBREQUEST        spbRequest);
+
+VOID
+SpbPeripheralSequence(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest,
+	_In_  ULONG             TransferCount);
+
+NTSTATUS
+SpbPeripheralSequence1(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest);
+
+NTSTATUS
+SpbPeripheralSequence2(
+	_In_  PPBC_DEVICE       pDevice,
+	_In_  SPBREQUEST        spbRequest);
 
 NTSTATUS
 SpbPeripheralSendRequest(

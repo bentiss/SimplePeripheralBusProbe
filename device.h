@@ -61,6 +61,7 @@ PbcTargetGetSettings(
 	_In_     PVOID                   ConnectionParameters,
 	_Out_    PPBC_TARGET_SETTINGS    pSettings);
 
+#if 0
 NTSTATUS
 FORCEINLINE
 PbcRequestSetByte(
@@ -137,5 +138,6 @@ PbcRequestSetByte(
 
     return status;
 }
+#endif
 
 #endif
