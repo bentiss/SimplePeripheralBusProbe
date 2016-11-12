@@ -213,12 +213,6 @@ struct PBC_DEVICE
 
 	SPBREQUEST ClientRequest;
 
-	// Structure mapped to the controller's
-    // register interface.
-    PSKELETONI2C_REGISTERS         pRegisters;
-    ULONG                          RegistersCb;
-    PHYSICAL_ADDRESS               pRegistersPhysicalAddress;
-
     // Target that the controller is currently
     // configured for. In most cases this value is only
     // set when there is a request being handled, however,
@@ -226,18 +220,6 @@ struct PBC_DEVICE
     // There cannot be more than one current target.
     PPBC_TARGET                    pCurrentTarget;
     
-    // Variables to track enabled interrupts
-    // and status between ISR and DPC.
-    WDFINTERRUPT                   InterruptObject;
-    ULONG                          InterruptMask;
-    ULONG                          InterruptStatus;
-
-    // Controller driver spinlock.
-    WDFSPINLOCK                    Lock;
-
-    // Delay timer used to stall between transfers.
-    WDFTIMER                       DelayTimer;
-
     // The power setting callback handle
     PVOID                          pMonitorPowerSettingHandle;
 };

@@ -21,7 +21,6 @@ Revision History:
 
 #include "internal.h"
 #include "device.h"
-#include "controller.h"
 #include "peripheral.h"
 
 #include "device.tmh"
@@ -376,32 +375,32 @@ OnTargetConnect(
 
     SpbTargetGetConnectionParameters(SpbTarget, &params);
 
-    //
-    // Retrieve target settings.
-    //
+	//
+	// Retrieve target settings.
+	//
 
-    status = PbcTargetGetSettings(pDevice,
-                                  params.ConnectionParameters,
-                                  &pTarget->Settings
-                                  );
-    
-    //
-    // Initialize target context.
-    //
+	status = PbcTargetGetSettings(pDevice,
+		params.ConnectionParameters,
+		&pTarget->Settings
+	);
 
-    if (NT_SUCCESS(status))
-    {
-        pTarget->SpbTarget = SpbTarget;
-        pTarget->pCurrentRequest = NULL;
+	//
+	// Initialize target context.
+	//
 
-        Trace(
-            TRACE_LEVEL_INFORMATION,
-            TRACE_FLAG_SPBDDI,
-            "Connected to SPBTARGET %p at address 0x%lx from WDFDEVICE %p",
-            pTarget->SpbTarget,
-            pTarget->Settings.Address,
-            pDevice->FxDevice);
-    }
+	if (NT_SUCCESS(status))
+	{
+		pTarget->SpbTarget = SpbTarget;
+		pTarget->pCurrentRequest = NULL;
+
+		Trace(
+			TRACE_LEVEL_INFORMATION,
+			TRACE_FLAG_SPBDDI,
+			"Connected to SPBTARGET %p at address 0x%lx from WDFDEVICE %p",
+			pTarget->SpbTarget,
+			pTarget->Settings.Address,
+			pDevice->FxDevice);
+	}
 
 	status = SpbPeripheralOpen(pDevice);
 	if (!NT_SUCCESS(status))
@@ -490,36 +489,16 @@ OnControllerLock(
     NT_ASSERT(pDevice  != NULL);
     NT_ASSERT(pTarget  != NULL);
 
-    //
-    // Acquire the device lock.
-    //
+	SpbPeripheralLock(pDevice, SpbRequest);
 
-    WdfSpinLockAcquire(pDevice->Lock);
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBDDI,
+		"Controller locked for SPBTARGET %p at address 0x%lx (WDFDEVICE %p)",
+		pTarget->SpbTarget,
+		pTarget->Settings.Address,
+		pDevice->FxDevice);
 
-    //
-    // Assign current target.
-    //
-
-    NT_ASSERT(pDevice->pCurrentTarget == NULL);
-
-    pDevice->pCurrentTarget = pTarget;
-
-    WdfSpinLockRelease(pDevice->Lock);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBDDI,
-        "Controller locked for SPBTARGET %p at address 0x%lx (WDFDEVICE %p)",
-        pTarget->SpbTarget,
-        pTarget->Settings.Address,
-        pDevice->FxDevice);
-
-    //
-    // Complete lock request.
-    //
-
-    SpbRequestComplete(SpbRequest, STATUS_SUCCESS);
-    
     FuncExit(TRACE_FLAG_SPBDDI);
 }
 
@@ -558,41 +537,18 @@ OnControllerUnlock(
     NT_ASSERT(pDevice  != NULL);
     NT_ASSERT(pTarget  != NULL);
 
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    // TODO: Check if there is an active sequence
-    //       and if so perform any action necessary
-    //       to stop the transfer in process.
-
-    //
-    // Remove current target.
-    //
-
-    NT_ASSERT(pDevice->pCurrentTarget == pTarget);
-
-    pDevice->pCurrentTarget = NULL;
+	
+	SpbPeripheralUnlock(pDevice, SpbRequest);
     
-    WdfSpinLockRelease(pDevice->Lock);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_SPBDDI,
-        "Controller unlocked for SPBTARGET %p at address 0x%lx (WDFDEVICE %p)",
-        pTarget->SpbTarget,
-        pTarget->Settings.Address,
-        pDevice->FxDevice);
-
-    //
-    // Complete lock request.
-    //
-
-    SpbRequestComplete(SpbRequest, STATUS_SUCCESS);
-    
-    FuncExit(TRACE_FLAG_SPBDDI);
+	Trace(
+		TRACE_LEVEL_INFORMATION,
+		TRACE_FLAG_SPBDDI,
+		"Controller unlocked for SPBTARGET %p at address 0x%lx (WDFDEVICE %p)",
+		pTarget->SpbTarget,
+		pTarget->Settings.Address,
+		pDevice->FxDevice);
+	
+	FuncExit(TRACE_FLAG_SPBDDI);
 }
 
 VOID
@@ -725,8 +681,7 @@ OnSequence(
     PPBC_DEVICE  pDevice  = GetDeviceContext(SpbController);
     PPBC_TARGET  pTarget  = GetTargetContext(SpbTarget);
     PPBC_REQUEST pRequest = GetRequestContext(SpbRequest);
-    BOOLEAN completeRequest = FALSE;
-    
+   
     NT_ASSERT(pDevice  != NULL);
     NT_ASSERT(pTarget  != NULL);
     NT_ASSERT(pRequest != NULL);
@@ -765,110 +720,9 @@ OnSequence(
         SpbTarget,
         SpbController);
 
-    //
-    // Validate the request before beginning the transfer.
-    //
-    
-    status = PbcRequestValidate(pRequest);
+	status = STATUS_NOT_SUPPORTED;
 
-    if (!NT_SUCCESS(status))
-    {
-        goto exit;
-    }
-    
-    //
-    // Configure the request.
-    //
-
-    status = PbcRequestConfigureForIndex(pRequest, 0);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR, 
-            TRACE_FLAG_SPBDDI, 
-            "Error configuring request context for SPBREQUEST %p "
-            "(SPBTARGET %p) - %!STATUS!",
-            pRequest->SpbRequest,
-            SpbTarget,
-            status);
-
-        goto exit;
-    }
-
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    //
-    // Mark request cancellable (if cancellation supported).
-    //
-
-    status = WdfRequestMarkCancelableEx(
-        pRequest->SpbRequest, OnCancel);
-
-    if (!NT_SUCCESS(status))
-    {
-        //
-        // WdfRequestMarkCancelableEx should only fail if the request
-        // has already been cancelled. If it does fail the request
-        // must be completed with the corresponding status.
-        //
-
-        NT_ASSERTMSG("WdfRequestMarkCancelableEx should only fail if the request has already been cancelled",
-            status == STATUS_CANCELLED);
-
-        Trace(
-            TRACE_LEVEL_INFORMATION,
-            TRACE_FLAG_TRANSFER,
-            "Failed to mark SPBREQUEST %p cancellable - %!STATUS!",
-            pRequest->SpbRequest,
-            status);
-        
-        WdfSpinLockRelease(pDevice->Lock);
-        goto exit;
-    }
-    
-    //
-    // Update device and target contexts.
-    //
-
-    NT_ASSERT(pDevice->pCurrentTarget == NULL);
-    NT_ASSERT(pTarget->pCurrentRequest == NULL);
-    
-    pDevice->pCurrentTarget = pTarget;
-    pTarget->pCurrentRequest = pRequest;
-    
-    //
-    // Configure controller and kick-off read.
-    // Request will be completed asynchronously.
-    //
-    
-    PbcRequestDoTransfer(pDevice, pRequest);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (pRequest->bIoComplete)
-    {
-        completeRequest = TRUE;
-    }
-    
-    WdfSpinLockRelease(pDevice->Lock);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (completeRequest)
-    {
-        PbcRequestComplete(pRequest);
-    }
-
-exit:
+//exit:
 
     if (!NT_SUCCESS(status))
     {
@@ -1221,417 +1075,6 @@ OnOther(
     
     FuncExit(TRACE_FLAG_SPBDDI);
 }
-
-VOID
-OnCancel(
-  _In_  WDFREQUEST  FxRequest
-)
-
-/*++
- 
-  Routine Description:
-
-    This routine cancels an outstanding request. It
-    must synchronize with other driver callbacks.
-
-  Arguments:
-
-    wdfRequest - a handle to the WDFREQUEST object
-
-  Return Value:
-
-    None.  The request is completed with status.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    SPBREQUEST spbRequest = (SPBREQUEST) FxRequest;
-    PPBC_DEVICE pDevice;
-    PPBC_TARGET pTarget;
-    PPBC_REQUEST pRequest;
-    BOOLEAN bTransferCompleted = FALSE;
-
-    //
-    // Get the contexts.
-    //
-
-    pDevice = GetDeviceContext(SpbRequestGetController(spbRequest));
-    pTarget = GetTargetContext(SpbRequestGetTarget(spbRequest));
-    pRequest = GetRequestContext(spbRequest);
-    
-    NT_ASSERT(pDevice  != NULL);
-    NT_ASSERT(pTarget  != NULL);
-    NT_ASSERT(pRequest != NULL);
-
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    //
-    // Make sure the current target and request 
-    // are valid.
-    //
-    
-    if (pTarget != pDevice->pCurrentTarget)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "Cancel callback without a valid current target for WDFDEVICE %p, "
-            "this should only occur if SPBREQUEST %p was already completed",
-            pDevice->FxDevice,
-            spbRequest
-            );
-
-        goto exit;
-    }
-
-    if (pRequest != pTarget->pCurrentRequest)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "Cancel callback without a valid current request for SPBTARGET %p, "
-            "this should only occur if SPBREQUEST %p was already completed",
-            pTarget->SpbTarget,
-            spbRequest);
-
-        goto exit;
-    }
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_TRANSFER,
-        "Cancel callback with outstanding SPBREQUEST %p, "
-        "stop IO and complete it",
-        spbRequest);
-
-    //
-    // Stop delay timer.
-    //
-
-    if(WdfTimerStop(pDevice->DelayTimer, FALSE))
-    {
-        Trace(
-            TRACE_LEVEL_INFORMATION,
-            TRACE_FLAG_TRANSFER,
-            "Delay timer previously schedule, now stopped");
-    }
-    
-    //
-    // Disable interrupts and clear saved stat for DPC. 
-    // Must synchronize with ISR.
-    //
-
-    NT_ASSERT(pDevice->InterruptObject != NULL);
-
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptAcquireLock(pDevice->InterruptObject);
-
-    ControllerDisableInterrupts(pDevice);
-    pDevice->InterruptStatus = 0;
-    
-    //
-    // TODO: Implement any necessary logic to abort the
-    //       current IO operation. For I2C this requires
-    //       driving a stop bit on the bus.
-    //
-    
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptReleaseLock(pDevice->InterruptObject);
-
-    //
-    // Mark request as cancelled and complete.
-    //
-
-    pRequest->Status = STATUS_CANCELLED;
-
-    ControllerCompleteTransfer(pDevice, pRequest, TRUE);
-    NT_ASSERT(pRequest->bIoComplete == TRUE);
-    bTransferCompleted = TRUE;
-
-exit:
-
-    //
-    // Release the device lock.
-    //
-
-    WdfSpinLockRelease(pDevice->Lock);
-
-    //
-    // Complete the request. There shouldn't be more IO.
-    // This must be done outside of the locked code.
-    //
-
-    if (bTransferCompleted)
-    {
-        PbcRequestComplete(pRequest);
-    }
-
-    FuncExit(TRACE_FLAG_SPBDDI);
-}
-
-
-/////////////////////////////////////////////////
-//
-// Interrupt handling functions.
-//
-/////////////////////////////////////////////////
-
-BOOLEAN
-OnInterruptIsr(
-    _In_  WDFINTERRUPT Interrupt,
-    _In_  ULONG        MessageID
-    )
-/*++
- 
-  Routine Description:
-
-    This routine responds to interrupts generated by the
-    controller. If one is recognized, it queues a DPC for 
-    processing. The interrupt is acknowledged and subsequent
-    interrupts are temporarily disabled.
-
-  Arguments:
-
-    Interrupt - a handle to a framework interrupt object
-    MessageID - message number identifying the device's
-        hardware interrupt message (if using MSI)
-
-  Return Value:
-
-    TRUE if interrupt recognized.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    BOOLEAN interruptRecognized = FALSE;
-    ULONG stat;
-    PPBC_DEVICE pDevice = GetDeviceContext(
-        WdfInterruptGetDevice(Interrupt));
-
-    UNREFERENCED_PARAMETER(MessageID);
-
-    NT_ASSERT(pDevice  != NULL);
-
-    //
-    // Queue a DPC if the device's interrupt
-    // is enabled and active.
-    //
-
-    stat = ControllerGetInterruptStatus(
-        pDevice,
-        PbcDeviceGetInterruptMask(pDevice));
-
-    if (stat > 0)
-    {
-        Trace(
-            TRACE_LEVEL_VERBOSE,
-            TRACE_FLAG_TRANSFER,
-            "Interrupt with status 0x%lx for WDFDEVICE %p",
-            stat,
-            pDevice->FxDevice);
-
-        //
-        // Save the interrupt status and disable all other
-        // interrupts for now.  They will be re-enabled
-        // in OnInterruptDpc.  Queue the DPC.
-        //
-
-        interruptRecognized = TRUE;
-        
-        pDevice->InterruptStatus |= (stat);
-        ControllerDisableInterrupts(pDevice);
-        
-        if(!WdfInterruptQueueDpcForIsr(Interrupt))
-        {
-            Trace(
-                TRACE_LEVEL_INFORMATION,
-                TRACE_FLAG_TRANSFER,
-                "Interrupt with status 0x%lx occurred with "
-                "DPC already queued for WDFDEVICE %p",
-                stat,
-                pDevice->FxDevice);
-        }
-    }
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-    
-    return interruptRecognized;
-}
-
-VOID
-OnInterruptDpc(
-    _In_  WDFINTERRUPT Interrupt,
-    _In_  WDFOBJECT    WdfDevice
-    )
-/*++
- 
-  Routine Description:
-
-    This routine processes interrupts from the controller.
-    When finished it reenables interrupts as appropriate.
-
-  Arguments:
-
-    Interrupt - a handle to a framework interrupt object
-    WdfDevice - a handle to the framework device object
-
-  Return Value:
-
-    None.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    PPBC_DEVICE pDevice;
-    PPBC_TARGET pTarget;
-    PPBC_REQUEST pRequest = NULL;
-    ULONG stat;
-    BOOLEAN bInterruptsProcessed = FALSE;
-    BOOLEAN completeRequest = FALSE;
-
-    UNREFERENCED_PARAMETER(Interrupt);
-
-    pDevice = GetDeviceContext(WdfDevice);
-    NT_ASSERT(pDevice != NULL);
-
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    //
-    // Make sure the target and request are
-    // still valid.
-    //
-
-    pTarget = pDevice->pCurrentTarget;
-    
-    if (pTarget == NULL)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "DPC scheduled without a valid current target for WDFDEVICE %p, "
-            "this should only occur if the request was already cancelled",
-            pDevice->FxDevice);
-
-        goto exit;
-    }
-
-    pRequest = pTarget->pCurrentRequest;
-
-    if (pRequest == NULL)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "DPC scheduled without a valid current request for SPBTARGET %p, "
-            "this should only occur if the request was already cancelled",
-            pTarget->SpbTarget);
-
-        goto exit;
-    }
-
-    NT_ASSERT(pRequest->SpbRequest != NULL);
-
-    //
-    // Synchronize shared data buffers with ISR.
-    // Copy interrupt status and clear shared buffer.
-    // If there is a current target and request,
-    // a DPC should never occur with interrupt status 0.
-    //
-
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptAcquireLock(Interrupt);
-
-    stat = pDevice->InterruptStatus;
-    pDevice->InterruptStatus = 0;
-
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptReleaseLock(Interrupt);
-
-    if (stat == 0)
-    {
-        goto exit;
-    }
-
-    Trace(
-        TRACE_LEVEL_VERBOSE,
-        TRACE_FLAG_TRANSFER,
-        "DPC for interrupt with status 0x%lx for WDFDEVICE %p",
-        stat,
-        pDevice->FxDevice);
-
-    //
-    // Acknowledge and process interrupts.
-    //
-
-    ControllerAcknowledgeInterrupts(pDevice, stat);
-
-    ControllerProcessInterrupts(pDevice, pRequest, stat);
-    bInterruptsProcessed = TRUE;
-    if (pRequest->bIoComplete)
-    {
-        completeRequest = TRUE;
-    }
-
-    //
-    // Re-enable interrupts if necessary. Synchronize with ISR.
-    //
-
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptAcquireLock(Interrupt);
-
-    ULONG mask = PbcDeviceGetInterruptMask(pDevice);
-
-    if (mask > 0)
-    {
-        Trace(
-            TRACE_LEVEL_VERBOSE,
-            TRACE_FLAG_TRANSFER,
-            "Re-enable interrupts with mask 0x%lx for WDFDEVICE %p",
-            mask,
-            pDevice->FxDevice);
-
-        ControllerEnableInterrupts(pDevice, mask);
-    }
-
-    // TODO: Uncomment when using interrupts.
-    //WdfInterruptReleaseLock(Interrupt);
-
-exit:
-
-    //
-    // Release the device lock.
-    //
-
-    WdfSpinLockRelease(pDevice->Lock);
-
-    //
-    // Complete the request if necessary.
-    // This must be done outside of the locked code.
-    //
-
-    if (bInterruptsProcessed)
-    {
-        if (completeRequest)
-        {
-            PbcRequestComplete(pRequest);
-        }
-    }
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-}
-
-
 /////////////////////////////////////////////////
 //
 // PBC functions.
@@ -1646,20 +1089,20 @@ PbcTargetGetSettings(
 )
 /*++
 
-  Routine Description:
+Routine Description:
 
-	This routine populates the target's settings.
+This routine populates the target's settings.
 
-  Arguments:
+Arguments:
 
-	pDevice - a pointer to the PBC device context
-	ConnectionParameters - a pointer to a blob containing the
-		connection parameters
-	Settings - a pointer the the target's settings
+pDevice - a pointer to the PBC device context
+ConnectionParameters - a pointer to a blob containing the
+connection parameters
+Settings - a pointer the the target's settings
 
-  Return Value:
+Return Value:
 
-	Status
+Status
 
 --*/
 {
@@ -1754,393 +1197,6 @@ PbcTargetGetSettings(
 
 	FuncExit(TRACE_FLAG_PBCLOADING);
 
-    return STATUS_SUCCESS;
+	return STATUS_SUCCESS;
 }
 
-NTSTATUS
-PbcRequestValidate(
-    _In_  PPBC_REQUEST               pRequest)
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    SPB_TRANSFER_DESCRIPTOR descriptor;
-    NTSTATUS status = STATUS_SUCCESS;
-
-    //
-    // Validate each transfer descriptor.
-    //
-
-    for (ULONG i = 0; i < pRequest->TransferCount; i++)
-    {
-        //
-        // Get transfer parameters for index.
-        //
-
-        SPB_TRANSFER_DESCRIPTOR_INIT(&descriptor);
-
-        SpbRequestGetTransferParameters(
-            pRequest->SpbRequest, 
-            i, 
-            &descriptor, 
-            nullptr);
-
-        //
-        // Validate the transfer length.
-        //
-    
-        if (descriptor.TransferLength > SI2C_MAX_TRANSFER_LENGTH)
-        {
-            status = STATUS_INVALID_PARAMETER;
-
-            Trace(
-                TRACE_LEVEL_ERROR, 
-                TRACE_FLAG_TRANSFER, 
-                "Transfer length %Iu is too large for controller driver, "
-                "max supported is %d (SPBREQUEST %p, index %lu) - %!STATUS!",
-                descriptor.TransferLength,
-                SI2C_MAX_TRANSFER_LENGTH,
-                pRequest->SpbRequest,
-                i,
-                status);
-
-            goto exit;
-        }
-    }
-
-exit:
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-
-    return status;
-}
-
-NTSTATUS
-PbcRequestConfigureForIndex(
-    _Inout_  PPBC_REQUEST            pRequest,
-    _In_     ULONG                   Index
-    )
-/*++
- 
-  Routine Description:
-
-    This is a helper routine used to configure the request
-    context and controller hardware for a transfer within a 
-    sequence. It validates parameters and retrieves
-    the transfer buffer as necessary.
-
-  Arguments:
-
-    pRequest - a pointer to the PBC request context
-    Index - index of the transfer within the sequence
-
-  Return Value:
-
-    STATUS
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    NT_ASSERT(pRequest != NULL);
- 
-    NTSTATUS status = STATUS_SUCCESS;
-
-    //
-    // Get transfer parameters for index.
-    //
-
-    SPB_TRANSFER_DESCRIPTOR descriptor;
-    PMDL pMdl;
-    
-    SPB_TRANSFER_DESCRIPTOR_INIT(&descriptor);
-
-    SpbRequestGetTransferParameters(
-        pRequest->SpbRequest, 
-        Index, 
-        &descriptor, 
-        &pMdl);
-       
-    NT_ASSERT(pMdl != NULL);
-    
-    //
-    // Configure request context.
-    //
-
-    pRequest->pMdlChain = pMdl;
-    pRequest->Length = descriptor.TransferLength;
-    pRequest->Information = 0;
-    pRequest->Direction = descriptor.Direction;
-    pRequest->DelayInUs = descriptor.DelayInUs;
-
-    //
-    // Update sequence position if request is type sequence.
-    //
-
-    if (pRequest->Type == SpbRequestTypeSequence)
-    {
-        if   (pRequest->TransferCount == 1)
-        {
-            pRequest->SequencePosition = SpbRequestSequencePositionSingle;
-        }
-        else if (Index == 0)
-        {
-            pRequest->SequencePosition = SpbRequestSequencePositionFirst;
-        }
-        else if (Index == (pRequest->TransferCount - 1))
-        {
-            pRequest->SequencePosition = SpbRequestSequencePositionLast;
-        }
-        else
-        {
-            pRequest->SequencePosition = SpbRequestSequencePositionContinue;
-        }
-    }
-
-    PPBC_TARGET pTarget = GetTargetContext(SpbRequestGetTarget(pRequest->SpbRequest));
-    NT_ASSERT(pTarget != NULL);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_TRANSFER,
-        "Request context configured for %s (index %lu) "
-        "to address 0x%lx (SPBTARGET %p)",
-        pRequest->Direction == SpbTransferDirectionFromDevice ? "read" : "write",
-        Index,
-        pTarget->Settings.Address,
-        pTarget->SpbTarget);
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-
-    return status;
-}
-
-VOID
-PbcRequestDoTransfer(
-    _In_     PPBC_DEVICE             pDevice,
-    _In_     PPBC_REQUEST            pRequest
-    )
-/*++
- 
-  Routine Description:
-
-    This routine either starts the delay timer or
-    kicks off the transfer depending on the request
-    parameters.
-
-  Arguments:
-
-    pDevice - a pointer to the PBC device context
-    pRequest - a pointer to the PBC request context
-
-  Return Value:
-
-    None. The request is completed asynchronously.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-    
-    NT_ASSERT(pDevice  != NULL);
-    NT_ASSERT(pRequest != NULL);
-
-    //
-    // Start delay timer if necessary for this request,
-    // otherwise continue transfer. 
-    //
-    // NOTE: Note using a timer to implement IO delay is only 
-    //       applicable for sufficiently long delays (> 15ms).
-    //       For shorter delays, especially on the order of
-    //       microseconds, consider using a different mechanism.
-    //
-
-    if (pRequest->DelayInUs > 0)
-    {
-        Trace(
-            TRACE_LEVEL_INFORMATION,
-            TRACE_FLAG_TRANSFER,
-            "Delaying %lu us before configuring transfer for WDFDEVICE %p",
-            pRequest->DelayInUs,
-            pDevice->FxDevice);
-
-        BOOLEAN bTimerAlreadyStarted;
-
-        bTimerAlreadyStarted = WdfTimerStart(
-            pDevice->DelayTimer, 
-            WDF_REL_TIMEOUT_IN_US(pRequest->DelayInUs));
-
-        //
-        // There should never be another request
-        // scheduled for delay.
-        //
-
-        if (bTimerAlreadyStarted == TRUE)
-        {
-            Trace(
-                TRACE_LEVEL_ERROR,
-                TRACE_FLAG_TRANSFER,
-                "The delay timer should not be started");
-        }
-    }
-    else
-    {
-        ControllerConfigureForTransfer(pDevice, pRequest);
-    }
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-}
-
-VOID
-OnDelayTimerExpired(
-    _In_  WDFTIMER  Timer
-    )
-/*++
- 
-  Routine Description:
-
-    This routine is invoked whenever the driver's delay
-    timer expires. It kicks off the transfer for the request.
-
-  Arguments:
-
-    Timer - a handle to a framework timer object
-
-  Return Value:
-
-    None.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    WDFDEVICE fxDevice;
-    PPBC_DEVICE pDevice;
-    PPBC_TARGET pTarget = NULL;
-    PPBC_REQUEST pRequest = NULL;
-    BOOLEAN completeRequest = FALSE;
-    
-    fxDevice = (WDFDEVICE) WdfTimerGetParentObject(Timer);
-    pDevice = GetDeviceContext(fxDevice);
-
-    NT_ASSERT(pDevice != NULL);
-
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    //
-    // Make sure the target and request are
-    // still valid.
-    //
-
-    pTarget = pDevice->pCurrentTarget;
-    
-    if (pTarget == NULL)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "Delay timer expired without a valid current target for WDFDEVICE %p, "
-            "this should only occur if the request was already completed",
-            pDevice->FxDevice);
-
-        goto exit;
-    }
-    
-    pRequest = pTarget->pCurrentRequest;
-
-    if (pRequest == NULL)
-    {
-        Trace(
-            TRACE_LEVEL_WARNING,
-            TRACE_FLAG_TRANSFER,
-            "Delay timer expired without a valid current request for SPBTARGET %p, "
-            "this should only occur if the request was already cancelled",
-            pTarget->SpbTarget);
-
-        goto exit;
-    }
-
-    NT_ASSERT(pRequest->SpbRequest != NULL);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_TRANSFER,
-        "Delay timer expired, ready to configure transfer for WDFDEVICE %p",
-        pDevice->FxDevice);
-
-    ControllerConfigureForTransfer(pDevice, pRequest);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (pRequest->bIoComplete)
-    {
-        completeRequest = TRUE;
-    }
-
-exit:
-
-    //
-    // Release the device lock.
-    //
-
-    WdfSpinLockRelease(pDevice->Lock);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (completeRequest)
-    {
-        PbcRequestComplete(pRequest);
-    }
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-}
-
-VOID
-PbcRequestComplete(
-    _In_     PPBC_REQUEST            pRequest
-    )
-/*++
- 
-  Routine Description:
-
-    This routine completes the SpbRequest associated with
-    the PBC_REQUEST context.
-
-  Arguments:
-
-    pRequest - a pointer to the PBC request context
-
-  Return Value:
-
-    None. The request is completed asynchronously.
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    NT_ASSERT(pRequest != NULL);
-
-    Trace(
-        TRACE_LEVEL_INFORMATION,
-        TRACE_FLAG_TRANSFER,
-        "Completing SPBREQUEST %p with %!STATUS!, transferred %Iu bytes",
-        pRequest->SpbRequest,
-        pRequest->Status,
-        pRequest->TotalInformation);
-
-    WdfRequestSetInformation(
-        pRequest->SpbRequest,
-        pRequest->TotalInformation);
-
-    SpbRequestComplete(
-        pRequest->SpbRequest, 
-        pRequest->Status);
-
-    FuncExit(TRACE_FLAG_TRANSFER);
-}

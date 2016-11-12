@@ -88,12 +88,6 @@
       <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
       <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
     </ClCompile>
-    <ClCompile Include="controller.cpp">
-      <WppEnabled>true</WppEnabled>
-      <WppKernelMode>true</WppKernelMode>
-      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
-      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
-    </ClCompile>
     <ClCompile Include="peripheral.cpp">
       <WppEnabled Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</WppEnabled>
       <WppTraceFunction Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
