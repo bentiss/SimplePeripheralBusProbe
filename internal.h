@@ -211,7 +211,7 @@ struct PBC_DEVICE
 	// Client request object
 	//
 
-	WDFREQUEST ClientRequest;
+	SPBREQUEST ClientRequest;
 
 	// Structure mapped to the controller's
     // register interface.

@@ -466,76 +466,87 @@ SpbPeripheralUnlockConnection(
 }
 
 VOID
-SpbTraceBuffer(
-	_In_ WDFREQUEST clientRequest,
-	_In_ BOOLEAN	input
+SpbTraceBufferIndex(
+	_In_ SPBREQUEST clientRequest,
+	_In_ ULONG      index
 )
 {
-	NTSTATUS dbg_status;
-	PVOID pBuffer = nullptr;
-	PUCHAR pDataBuffer = nullptr;
-	size_t dataBufferLength = 0;
-	//			size_t outputBufferLength = 0;
-	int i;
+	SPB_TRANSFER_DESCRIPTOR transferDescriptor;
+	PMDL pMdl;
+	const ULONG max_len = 1024;
+	ULONG i;
+	UCHAR pBuffer[max_len] = { 0 };
 
-	if (input)
+	SPB_TRANSFER_DESCRIPTOR_INIT(&transferDescriptor);
+
+	SpbRequestGetTransferParameters(
+		clientRequest,
+		index,
+		&transferDescriptor,
+		&pMdl);
+
+	Trace(
+		TRACE_LEVEL_ERROR,
+		TRACE_FLAG_SPBAPI,
+		"Retrieved buffer #%d (%lu)",
+		index,
+		(unsigned long)transferDescriptor.TransferLength
+	);
+
+	ULONG length = min((ULONG)transferDescriptor.TransferLength, max_len);
+
+	for (i = 0; i < length; i++)
 	{
-		dbg_status = WdfRequestRetrieveInputBuffer(
-			clientRequest,
-			0,
-			&pBuffer,
-			&dataBufferLength);
-	}
-	else
-	{
-		dbg_status = WdfRequestRetrieveOutputBuffer(
-			clientRequest,
-			0,
-			&pBuffer,
-			&dataBufferLength);
+		RequestGetByte(pMdl, transferDescriptor.TransferLength, i, &pBuffer[i]);
 	}
 
-	if (NT_SUCCESS(dbg_status))
+	for (i = 0; i < length / 16; i++)
 	{
 		Trace(
-			TRACE_LEVEL_INFORMATION,
+			TRACE_LEVEL_ERROR,
 			TRACE_FLAG_SPBAPI,
-			"Retrieved %s buffer (%lu)",
-			input ? "input" : "output",
-			(unsigned long)dataBufferLength
+			"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+			i * 16,
+			pBuffer[i * 16 + 0], pBuffer[i * 16 + 1], pBuffer[i * 16 + 2], pBuffer[i * 16 + 3],
+			pBuffer[i * 16 + 4], pBuffer[i * 16 + 5], pBuffer[i * 16 + 6], pBuffer[i * 16 + 7],
+			pBuffer[i * 16 + 8], pBuffer[i * 16 + 9], pBuffer[i * 16 + 10], pBuffer[i * 16 + 11],
+			pBuffer[i * 16 + 12], pBuffer[i * 16 + 13], pBuffer[i * 16 + 14], pBuffer[i * 16 + 15]
 		);
-
-		pDataBuffer = (PUCHAR)pBuffer;
-
-		for (i = 0; i < (dataBufferLength / 16); i++)
-		{
-			Trace(
-				TRACE_LEVEL_ERROR,
-				TRACE_FLAG_SPBAPI,
-				"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-				i * 16,
-				pDataBuffer[i * 16 + 0], pDataBuffer[i * 16 + 1], pDataBuffer[i * 16 + 2], pDataBuffer[i * 16 + 3],
-				pDataBuffer[i * 16 + 4], pDataBuffer[i * 16 + 5], pDataBuffer[i * 16 + 6], pDataBuffer[i * 16 + 7],
-				pDataBuffer[i * 16 + 8], pDataBuffer[i * 16 + 9], pDataBuffer[i * 16 + 10], pDataBuffer[i * 16 + 11],
-				pDataBuffer[i * 16 + 12], pDataBuffer[i * 16 + 13], pDataBuffer[i * 16 + 14], pDataBuffer[i * 16 + 15]
-			);
-		}
-		if (i * 16 < dataBufferLength)
-		{
-#define DATA_BUFFER(_index) (i * 16 + _index < dataBufferLength ? pDataBuffer[i * 16 + _index] : 0x00)
-			Trace(
-				TRACE_LEVEL_ERROR,
-				TRACE_FLAG_SPBAPI,
-				"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-				i * 16,
-				DATA_BUFFER(0), DATA_BUFFER(1), DATA_BUFFER(2), DATA_BUFFER(3),
-				DATA_BUFFER(4), DATA_BUFFER(5), DATA_BUFFER(6), DATA_BUFFER(7),
-				DATA_BUFFER(8), DATA_BUFFER(9), DATA_BUFFER(10), DATA_BUFFER(11),
-				DATA_BUFFER(12), DATA_BUFFER(13), DATA_BUFFER(14), DATA_BUFFER(15)
-			);
-#undef DATA_BUFFER
-		}
 	}
+
+	if (i * 16 < length)
+	{
+#define DATA_BUFFER(_index) (i * 16 + _index < length ? pBuffer[i * 16 + _index] : 0x00)
+		Trace(
+			TRACE_LEVEL_ERROR,
+			TRACE_FLAG_SPBAPI,
+			"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+			i * 16,
+			DATA_BUFFER(0), DATA_BUFFER(1), DATA_BUFFER(2), DATA_BUFFER(3),
+			DATA_BUFFER(4), DATA_BUFFER(5), DATA_BUFFER(6), DATA_BUFFER(7),
+			DATA_BUFFER(8), DATA_BUFFER(9), DATA_BUFFER(10), DATA_BUFFER(11),
+			DATA_BUFFER(12), DATA_BUFFER(13), DATA_BUFFER(14), DATA_BUFFER(15)
+		);
+#undef DATA_BUFFER
+	}
+}
+
+VOID
+SpbTraceBuffers(
+	_In_ SPBREQUEST clientRequest
+)
+{
+	SPB_REQUEST_PARAMETERS parameters;
+	
+	SPB_REQUEST_PARAMETERS_INIT(&parameters);
+
+	SpbRequestGetParameters(clientRequest, &parameters);
+
+	for (ULONG i = 0; i < parameters.SequenceTransferCount; i += 1)
+	{
+		SpbTraceBufferIndex(clientRequest, i);
+	}
+
 }
 
 VOID
@@ -1509,11 +1520,10 @@ Return Value:
 
     if (pDevice->ClientRequest != nullptr)
     {
-        WDFREQUEST clientRequest = pDevice->ClientRequest;
+        SPBREQUEST clientRequest = pDevice->ClientRequest;
         pDevice->ClientRequest = nullptr;
 
-		SpbTraceBuffer(clientRequest, WdfTrue);
-		SpbTraceBuffer(clientRequest, WdfFalse);
+		SpbTraceBuffers(clientRequest);
 
         // In order to satisfy SDV, assume clientRequest
         // is equal to pDevice->ClientRequest. This suppresses
