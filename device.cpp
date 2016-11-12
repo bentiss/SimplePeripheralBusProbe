@@ -273,8 +273,6 @@ Status
 				pDevice->SpbRequest);
 
 			pRequest->FxDevice = pDevice->FxDevice;
-			pRequest->IsSpbSequenceRequest = FALSE;
-			pRequest->SequenceWriteLength = 0;
 		}
 	}
 
@@ -989,13 +987,11 @@ exit:
     //FuncExit(TRACE_FLAG_SPBDDI);
 }
 
-VOID
+NTSTATUS
 OnFullDuplex(
 	_In_  WDFDEVICE   SpbController,
 	_In_  SPBTARGET   SpbTarget,
-	_In_  SPBREQUEST  SpbRequest,
-	_In_  size_t      OutputBufferLength,
-	_In_  size_t      InputBufferLength
+	_In_  SPBREQUEST  SpbRequest
 )
 /*++
 
@@ -1020,30 +1016,113 @@ None.  The request is completed asynchronously.
 {
 	FuncEntry(TRACE_FLAG_SPBDDI);
 
+	NTSTATUS status = STATUS_SUCCESS;
 	PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
 
 	UNREFERENCED_PARAMETER(SpbController);
 	UNREFERENCED_PARAMETER(SpbTarget);
 	UNREFERENCED_PARAMETER(SpbRequest);
-	UNREFERENCED_PARAMETER(OutputBufferLength);
-	UNREFERENCED_PARAMETER(InputBufferLength);
-	
-	if (InputBufferLength && OutputBufferLength)
+
+	//
+	// Validate the transfer count.
+	//
+
+	SPB_REQUEST_PARAMETERS params;
+	SPB_REQUEST_PARAMETERS_INIT(&params);
+	SpbRequestGetParameters(SpbRequest, &params);
+
+	if (params.SequenceTransferCount != 2)
 	{
-		SpbPeripheralFullDuplex(pDevice, SpbRequest);
-	}
-	else if (OutputBufferLength)
-	{
-		SpbPeripheralWrite(pDevice, SpbRequest, WdfTrue);
-		//SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
-	}
-	else
-	{
-		SpbPeripheralRead(pDevice, SpbRequest, WdfTrue);
-		//SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
+		//
+		// The full-suplex request must have
+		// exactly two transfer descriptor
+		//
+
+		status = STATUS_INVALID_PARAMETER;
+		goto exit;
 	}
 
+	//
+	// Retrieve the write and read transfer descriptors.
+	//
+
+	const ULONG fullDuplexWriteIndex = 0;
+	const ULONG fullDuplexReadIndex = 1;
+
+	SPB_TRANSFER_DESCRIPTOR writeDescriptor;
+	SPB_TRANSFER_DESCRIPTOR readDescriptor;
+	PMDL pWriteMdl;
+	PMDL pReadMDL;
+
+	SPB_TRANSFER_DESCRIPTOR_INIT(&writeDescriptor);
+	SPB_TRANSFER_DESCRIPTOR_INIT(&readDescriptor);
+
+	SpbRequestGetTransferParameters(
+		SpbRequest,
+		fullDuplexWriteIndex,
+		&writeDescriptor,
+		&pWriteMdl);
+
+	SpbRequestGetTransferParameters(
+		SpbRequest,
+		fullDuplexReadIndex,
+		&readDescriptor,
+		&pReadMDL);
+
+	//
+	// Validate the transfer direction of each descriptor.
+	//
+
+	if ((writeDescriptor.Direction != SpbTransferDirectionToDevice) ||
+		(readDescriptor.Direction != SpbTransferDirectionFromDevice))
+	{
+		//
+		// For Full-duplex I/O, the direction of the first transfer
+		// must be SpbTransferDirectionToDevice, and the direction
+		// of the second must be SpbTransferDirectionFromDevice.
+		//
+
+		status = STATUS_INVALID_PARAMETER;
+		goto exit;
+	}
+
+	//
+	// Validate the delay for each transfer descriptor.
+	//
+
+	if ((writeDescriptor.DelayInUs != 0) || (readDescriptor.DelayInUs != 0))
+	{
+		//
+		// The write and read buffers for full-duplex I?O are transferred
+		// simultaneously over the bus, The delay parameter in each transfer
+		// descriptor must be set to 0.
+		//
+
+		status = STATUS_INVALID_PARAMETER;
+		goto exit;
+	}
+	
+	SpbPeripheralFullDuplex(pDevice, SpbRequest);
+	//if (InputBufferLength && OutputBufferLength)
+	//{
+	//	SpbPeripheralFullDuplex(pDevice, SpbRequest, OutputBufferLength, InputBufferLength);
+	//}
+	//else if (OutputBufferLength)
+	//{
+	//	SpbPeripheralWrite(pDevice, SpbRequest, WdfTrue);
+	//	//SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
+	//}
+	//else
+	//{
+	//	SpbPeripheralRead(pDevice, SpbRequest, WdfTrue);
+	//	//SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
+	//}
+
+exit:
+
 	FuncExit(TRACE_FLAG_SPBDDI);
+
+	return status;
 }
 
 VOID
@@ -1103,8 +1182,7 @@ OnOther(
 			(unsigned long)OutputBufferLength
 		);
 
-		OnFullDuplex(SpbController, SpbTarget, SpbRequest, OutputBufferLength, InputBufferLength);
-		status = STATUS_SUCCESS;
+		status = OnFullDuplex(SpbController, SpbTarget, SpbRequest);
 	} 
 	else
 	{
@@ -1734,209 +1812,6 @@ exit:
     FuncExit(TRACE_FLAG_TRANSFER);
 
     return status;
-}
-
-VOID
-PbcRequestConfigureForNonSequence(
-    _In_  WDFDEVICE                  SpbController,
-    _In_  SPBTARGET                  SpbTarget,
-    _In_  SPBREQUEST                 SpbRequest,
-    _In_  size_t                     Length
-    )
-/*++
- 
-  Routine Description:
-
-    This is a generic helper routine used to configure
-    the request context and controller hardware for a non-
-    sequence SPB request. It validates parameters and retrieves
-    the transfer buffer as necessary.
-
-  Arguments:
-
-    pDevice - a pointer to the PBC device context
-    pTarget - a pointer to the PBC target context
-    pRequest - a pointer to the PBC request context
-    Length - the number of bytes to read from the target
-    Direction - direction of the transfer
-
-  Return Value:
-
-    STATUS
-
---*/
-{
-    FuncEntry(TRACE_FLAG_TRANSFER);
-
-    PPBC_DEVICE  pDevice  = GetDeviceContext(SpbController);
-    PPBC_TARGET  pTarget  = GetTargetContext(SpbTarget);
-    PPBC_REQUEST pRequest = GetRequestContext(SpbRequest);
-    BOOLEAN completeRequest = FALSE;
-    
-    NT_ASSERT(pDevice  != NULL);
-    NT_ASSERT(pTarget  != NULL);
-    NT_ASSERT(pRequest != NULL);
-
-    UNREFERENCED_PARAMETER(Length);
-
-    NTSTATUS status;
-    
-    //
-    // Get the request parameters.
-    //
-
-    SPB_REQUEST_PARAMETERS params;
-    SPB_REQUEST_PARAMETERS_INIT(&params);
-    SpbRequestGetParameters(SpbRequest, &params);
-
-    //
-    // Initialize request context.
-    //
-    
-    pRequest->SpbRequest = SpbRequest;
-    pRequest->Type = params.Type;
-    pRequest->SequencePosition = params.Position;
-    pRequest->TotalInformation = 0;
-    pRequest->TransferCount = 1;
-    pRequest->TransferIndex = 0;
-    pRequest->bIoComplete = FALSE;
-
-    //
-    // Validate the request before beginning the transfer.
-    //
-    
-    status = PbcRequestValidate(pRequest);
-
-    if (!NT_SUCCESS(status))
-    {
-        goto exit;
-    }
-    
-    //
-    // Configure the request.
-    //
-
-    status = PbcRequestConfigureForIndex(
-        pRequest, 
-        pRequest->TransferIndex);
-
-    if (!NT_SUCCESS(status))
-    {
-        Trace(
-            TRACE_LEVEL_ERROR, 
-            TRACE_FLAG_SPBDDI, 
-            "Error configuring request context for SPBREQUEST %p (SPBTARGET %p)"
-            "- %!STATUS!", 
-            pRequest->SpbRequest,
-            SpbTarget,
-            status);
-
-        goto exit;
-    }
-
-    //
-    // Acquire the device lock.
-    //
-
-    WdfSpinLockAcquire(pDevice->Lock);
-
-    //
-    // Mark request cancellable (if cancellation supported).
-    //
-
-    status = WdfRequestMarkCancelableEx(
-        pRequest->SpbRequest, OnCancel);
-
-    if (!NT_SUCCESS(status))
-    {
-        //
-        // WdfRequestMarkCancelableEx should only fail if the request
-        // has already been cancelled. If it does fail the request
-        // must be completed with the corresponding status.
-        //
-
-        NT_ASSERTMSG("WdfRequestMarkCancelableEx should only fail if the request has already been cancelled",
-            status == STATUS_CANCELLED);
-
-        Trace(
-            TRACE_LEVEL_INFORMATION,
-            TRACE_FLAG_TRANSFER,
-            "Failed to mark SPBREQUEST %p cancellable - %!STATUS!",
-            pRequest->SpbRequest,
-            status);
-
-        WdfSpinLockRelease(pDevice->Lock);
-        goto exit;
-    }
-    
-    //
-    // If sequence position is...
-    //   - single:     ensure there is not a current target
-    //   - not single: ensure that the current target is the
-    //                 same as this target
-    //
-    
-    if (params.Position == SpbRequestSequencePositionSingle)
-    {        
-        NT_ASSERT(pDevice->pCurrentTarget == NULL);
-    }
-    else
-    {   
-        NT_ASSERT(pDevice->pCurrentTarget == pTarget);
-    }
-    
-    //
-    // Ensure there is not a current request.
-    //
-    
-    NT_ASSERT(pTarget->pCurrentRequest == NULL);
-    
-    //
-    // Update the device and target contexts.
-    //
-    
-    if (pRequest->SequencePosition == SpbRequestSequencePositionSingle)
-    {
-        pDevice->pCurrentTarget = pTarget;
-    }
-    
-    pTarget->pCurrentRequest = pRequest;
-    
-    //
-    // Configure controller and kick-off read.
-    // Request will be completed asynchronously.
-    //
-    
-    PbcRequestDoTransfer(pDevice, pRequest);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (pRequest->bIoComplete)
-    {
-        completeRequest = TRUE;
-    }
-
-    WdfSpinLockRelease(pDevice->Lock);
-    
-    // TODO: Remove this block. For the purpose of this 
-    //       skeleton sample, simply complete the request 
-    //       synchronously. This must be done outside of 
-    //       the locked code.
-    if (completeRequest)
-    {
-        PbcRequestComplete(pRequest);
-    }
-
-exit:
-    
-    if (!NT_SUCCESS(status))
-    {
-        SpbRequestComplete(SpbRequest, status);
-    }
-    
-    FuncExit(TRACE_FLAG_TRANSFER);
 }
 
 NTSTATUS

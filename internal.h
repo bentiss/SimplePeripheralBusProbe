@@ -278,15 +278,6 @@ struct PBC_REQUEST
 	//
 
 	WDFDEVICE FxDevice;
-
-	//
-	// Variables to track write length for a sequence request.
-	// There are needed to complete the client request with
-	// correct bytesReturned value.
-	//
-
-	BOOLEAN IsSpbSequenceRequest;
-	ULONG_PTR SequenceWriteLength;
 	
 	//
     // Variables that persist for the lifetime of

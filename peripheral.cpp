@@ -885,16 +885,6 @@ SpbPeripheralWriteRead(
     //
 
     //
-    // Mark SPB request as sequence and save length.
-    // These will be used in the completion callback
-    // to complete the client request with the correct
-    // number of bytes
-    //
-
-    pRequest->IsSpbSequenceRequest = TRUE;
-    pRequest->SequenceWriteLength = (ULONG_PTR)inputBufferLength;
-
-    //
     // Format and send the SPB sequence request.
     //
 
@@ -973,12 +963,8 @@ SpbPeripheralFullDuplex(
 {
     FuncEntry(TRACE_FLAG_SPBAPI);
 
-    UNREFERENCED_PARAMETER(spbRequest);
+	UNREFERENCED_PARAMETER(spbRequest);
 
-    PVOID pInputBuffer = nullptr;
-    PVOID pOutputBuffer = nullptr;
-    size_t inputBufferLength = 0;
-    size_t outputBufferLength = 0;
     WDF_OBJECT_ATTRIBUTES attributes;
     PPBC_REQUEST pRequest;
     NTSTATUS status;
@@ -1001,39 +987,28 @@ SpbPeripheralFullDuplex(
     // Get input and output buffers.
     //
 
-	status = WdfRequestRetrieveInputBuffer(
+	const ULONG fullDuplexWriteIndex = 0;
+	const ULONG fullDuplexReadIndex = 1;
+
+	SPB_TRANSFER_DESCRIPTOR writeDescriptor;
+	SPB_TRANSFER_DESCRIPTOR readDescriptor;
+	PMDL pWriteMdl;
+	PMDL pReadMdl;
+
+	SPB_TRANSFER_DESCRIPTOR_INIT(&writeDescriptor);
+	SPB_TRANSFER_DESCRIPTOR_INIT(&readDescriptor);
+
+	SpbRequestGetTransferParameters(
 		spbRequest,
-		0,
-		&pInputBuffer,
-		&inputBufferLength);
+		fullDuplexWriteIndex,
+		&writeDescriptor,
+		&pWriteMdl);
 
-	if (!NT_SUCCESS(status))
-	{
-		Trace(
-			TRACE_LEVEL_ERROR,
-			TRACE_FLAG_SPBAPI,
-			"Failed to retrieve input buffer - %!STATUS!",
-			status);
-
-		goto Done;
-	}
-
-	status = WdfRequestRetrieveOutputBuffer(
+	SpbRequestGetTransferParameters(
 		spbRequest,
-		0,
-		&pOutputBuffer,
-		&outputBufferLength);
-
-	if (!NT_SUCCESS(status))
-	{
-		Trace(
-			TRACE_LEVEL_ERROR,
-			TRACE_FLAG_SPBAPI,
-			"Failed to retrieve output buffer - %!STATUS!",
-			status);
-
-		goto Done;
-	}
+		fullDuplexReadIndex,
+		&readDescriptor,
+		&pReadMdl);
 
     //
     // Build full duplex transfer using SPB transfer list.
@@ -1051,20 +1026,17 @@ SpbPeripheralFullDuplex(
         // the warning. This is a false positive from OACR.
         // 
 
-        ULONG index = 0;
-		
-		seq.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
+        const ULONG index = 0;
+
+		seq.List.Transfers[index] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
 			SpbTransferDirectionToDevice,
 			0,
-			pInputBuffer,
-			(ULONG)inputBufferLength);
+			pWriteMdl);
 
-		seq.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_SIMPLE(
+		seq.List.Transfers[index + 1] = SPB_TRANSFER_LIST_ENTRY_INIT_MDL(
 			SpbTransferDirectionFromDevice,
 			0,
-			pOutputBuffer,
-			(ULONG)outputBufferLength);
-			index++;
+			pReadMdl);
     }
 
     //
@@ -1099,21 +1071,11 @@ SpbPeripheralFullDuplex(
         TRACE_FLAG_SPBAPI,
         "Built full duplex transfer %p with byte length=%lu",
         &seq,
-        (ULONG)(inputBufferLength + outputBufferLength));
+        (ULONG)(writeDescriptor.TransferLength + readDescriptor.TransferLength));
 
     //
     // Send full duplex IOCTL.
     //
-
-    //
-    // Mark SPB request as full duplex (sequence format)
-    // and save length. These will be used in the completion 
-    // callback to complete the client request with the correct
-    // number of bytes
-    //
-
-    pRequest->IsSpbSequenceRequest = TRUE;
-    pRequest->SequenceWriteLength = (ULONG_PTR)inputBufferLength;
 
     //
     // Format and send the full duplex request.
@@ -1212,8 +1174,6 @@ SpbPeripheralSendRequest(
     //
 
     pRequest->FxDevice = pDevice->FxDevice;
-    pRequest->IsSpbSequenceRequest = FALSE;
-    pRequest->SequenceWriteLength = 0;
 
     //
     // Mark the client request as cancellable.
@@ -1431,24 +1391,7 @@ SpbPeripheralOnCompletion(
     // Complete the request pair
     //
 
-    if (pRequest->IsSpbSequenceRequest == TRUE)
-    {
-        //
-        // The client DeviceIoControl should only be
-        // completed with bytesReturned and not total
-        // bytes transferred.  Here we infer the number
-        // of bytes read by substracting the write
-        // length from the total.
-        //
-
-        bytesCompleted = 
-            Params->IoStatus.Information < pRequest->SequenceWriteLength ?
-            0 : Params->IoStatus.Information - pRequest->SequenceWriteLength;
-    }
-    else
-    {
-        bytesCompleted = Params->IoStatus.Information;
-    }
+    bytesCompleted = Params->IoStatus.Information;
 
     SpbPeripheralCompleteRequestPair(
         pDevice,
@@ -1545,9 +1488,6 @@ Return Value:
     //
     // Mark the SPB request as reuse
     //
-
-    pRequest->IsSpbSequenceRequest = FALSE;
-    pRequest->SequenceWriteLength = 0;
 
     WDF_REQUEST_REUSE_PARAMS params;
     WDF_REQUEST_REUSE_PARAMS_INIT(

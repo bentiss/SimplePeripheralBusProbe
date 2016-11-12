@@ -65,13 +65,6 @@ NTSTATUS
 PbcRequestValidate(
     _In_     PPBC_REQUEST            pRequest);
 
-VOID
-PbcRequestConfigureForNonSequence(
-    _In_  WDFDEVICE                  SpbController,
-    _In_  SPBTARGET                  SpbTarget,
-    _In_  SPBREQUEST                 SpbRequest,
-    _In_  size_t                     Length);
-
 NTSTATUS
 PbcRequestConfigureForIndex(
     _Inout_  PPBC_REQUEST            pRequest,
