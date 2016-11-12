@@ -626,7 +626,9 @@ OnRead(
 
 --*/
 {
-    FuncEntry(TRACE_FLAG_SPBDDI);
+	PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
+	
+	FuncEntry(TRACE_FLAG_SPBDDI);
 
     Trace(
         TRACE_LEVEL_INFORMATION,
@@ -638,11 +640,7 @@ OnRead(
         SpbTarget,
         SpbController);
 
-    PbcRequestConfigureForNonSequence(
-        SpbController,
-        SpbTarget,
-        SpbRequest,
-        Length);
+	SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
 
     FuncExit(TRACE_FLAG_SPBDDI);
 }
@@ -676,7 +674,9 @@ OnWrite(
 
 --*/
 {
-    FuncEntry(TRACE_FLAG_SPBDDI);
+	PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
+
+	FuncEntry(TRACE_FLAG_SPBDDI);
 
     Trace(
         TRACE_LEVEL_INFORMATION,
@@ -688,13 +688,9 @@ OnWrite(
         SpbTarget,
         SpbController);
 
-    PbcRequestConfigureForNonSequence(
-        SpbController,
-        SpbTarget,
-        SpbRequest,
-        Length);
+	SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
 
-    FuncExit(TRACE_FLAG_SPBDDI);
+	FuncExit(TRACE_FLAG_SPBDDI);
 }
 
 VOID
@@ -994,6 +990,63 @@ exit:
 }
 
 VOID
+OnFullDuplex(
+	_In_  WDFDEVICE   SpbController,
+	_In_  SPBTARGET   SpbTarget,
+	_In_  SPBREQUEST  SpbRequest,
+	_In_  size_t      OutputBufferLength,
+	_In_  size_t      InputBufferLength
+)
+/*++
+
+Routine Description:
+
+This routine processes Full Duplex requests.
+
+Arguments:
+
+SpbController - a handle to the framework device object
+representing an SPB controller
+SpbTarget - a handle to the SPBTARGET object
+SpbRequest - a handle to the SPBREQUEST object
+OutputBufferLength - the request's output buffer length
+InputBufferLength - the requests input buffer length
+
+Return Value:
+
+None.  The request is completed asynchronously.
+
+--*/
+{
+	FuncEntry(TRACE_FLAG_SPBDDI);
+
+	PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
+
+	UNREFERENCED_PARAMETER(SpbController);
+	UNREFERENCED_PARAMETER(SpbTarget);
+	UNREFERENCED_PARAMETER(SpbRequest);
+	UNREFERENCED_PARAMETER(OutputBufferLength);
+	UNREFERENCED_PARAMETER(InputBufferLength);
+	
+	if (InputBufferLength && OutputBufferLength)
+	{
+		SpbPeripheralFullDuplex(pDevice, SpbRequest);
+	}
+	else if (OutputBufferLength)
+	{
+		SpbPeripheralWrite(pDevice, SpbRequest, WdfTrue);
+		//SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
+	}
+	else
+	{
+		SpbPeripheralRead(pDevice, SpbRequest, WdfTrue);
+		//SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
+	}
+
+	FuncExit(TRACE_FLAG_SPBDDI);
+}
+
+VOID
 OnOther(
     _In_  WDFDEVICE   SpbController,
     _In_  SPBTARGET   SpbTarget,
@@ -1041,8 +1094,6 @@ OnOther(
 
 	if (IoControlCode == IOCTL_SPB_FULL_DUPLEX)
 	{
-		PPBC_DEVICE  pDevice = GetDeviceContext(SpbController);
-
 		Trace(
 			TRACE_LEVEL_ERROR,
 			TRACE_FLAG_SPBDDI,
@@ -1052,20 +1103,7 @@ OnOther(
 			(unsigned long)OutputBufferLength
 		);
 
-		if (InputBufferLength && OutputBufferLength)
-		{
-			SpbPeripheralFullDuplex(pDevice, SpbRequest);
-		}
-		else if (OutputBufferLength)
-		{
-			SpbPeripheralWrite(pDevice, SpbRequest, WdfTrue);
-			//SpbPeripheralRead(pDevice, SpbRequest, WdfFalse);
-		}
-		else
-		{
-			SpbPeripheralRead(pDevice, SpbRequest, WdfTrue);
-			//SpbPeripheralWrite(pDevice, SpbRequest, WdfFalse);
-		}
+		OnFullDuplex(SpbController, SpbTarget, SpbRequest, OutputBufferLength, InputBufferLength);
 		status = STATUS_SUCCESS;
 	} 
 	else
