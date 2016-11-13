@@ -467,8 +467,9 @@ SpbPeripheralUnlockConnection(
 
 VOID
 SpbTraceBufferIndex(
-	_In_ SPBREQUEST clientRequest,
-	_In_ ULONG      index
+	_In_ PPBC_DEVICE pDevice,
+	_In_ SPBREQUEST  clientRequest,
+	_In_ ULONG       index
 )
 {
 	SPB_TRANSFER_DESCRIPTOR transferDescriptor;
@@ -488,9 +489,12 @@ SpbTraceBufferIndex(
 	Trace(
 		TRACE_LEVEL_ERROR,
 		TRACE_FLAG_SPBAPI,
-		"Retrieved buffer #%d (%lu)",
+		"Retrieved%s%sbuffer #%d (%lu) On device %I64d",
+		transferDescriptor.Direction == SpbTransferDirectionToDevice ? " write" : " ",
+		transferDescriptor.Direction == SpbTransferDirectionFromDevice ? "read " : " ",
 		index,
-		(unsigned long)transferDescriptor.TransferLength
+		(unsigned long)transferDescriptor.TransferLength,
+		pDevice->PeripheralId.QuadPart
 	);
 
 	ULONG length = min((ULONG)transferDescriptor.TransferLength, max_len);
@@ -516,23 +520,39 @@ SpbTraceBufferIndex(
 
 	if (i * 16 < length)
 	{
-#define DATA_BUFFER(_index) (i * 16 + _index < length ? pBuffer[i * 16 + _index] : 0x00)
+		const UCHAR table[] = { '0', '1', '2' , '3' , '4' , '5' , '6' , '7' , '8' , '9' , 'a' , 'b' , 'c' , 'd' , 'e' , 'f'};
+
+#define DATA_BUFFERH(_index) (i * 16 + _index < length ? table[(pBuffer[i * 16 + _index] & 0xF0) >> 4] : ' ')
+#define DATA_BUFFERL(_index) (i * 16 + _index < length ? table[(pBuffer[i * 16 + _index] & 0x0F) >> 0] : ' ')
 		Trace(
 			TRACE_LEVEL_ERROR,
 			TRACE_FLAG_SPBAPI,
-			"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+			"%04x: %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c",
 			i * 16,
-			DATA_BUFFER(0), DATA_BUFFER(1), DATA_BUFFER(2), DATA_BUFFER(3),
-			DATA_BUFFER(4), DATA_BUFFER(5), DATA_BUFFER(6), DATA_BUFFER(7),
-			DATA_BUFFER(8), DATA_BUFFER(9), DATA_BUFFER(10), DATA_BUFFER(11),
-			DATA_BUFFER(12), DATA_BUFFER(13), DATA_BUFFER(14), DATA_BUFFER(15)
+			DATA_BUFFERH(0), DATA_BUFFERL(0), 
+			DATA_BUFFERH(1), DATA_BUFFERL(1),
+			DATA_BUFFERH(2), DATA_BUFFERL(2),
+			DATA_BUFFERH(3), DATA_BUFFERL(3),
+			DATA_BUFFERH(4), DATA_BUFFERL(4),
+			DATA_BUFFERH(5), DATA_BUFFERL(5),
+			DATA_BUFFERH(6), DATA_BUFFERL(6),
+			DATA_BUFFERH(7), DATA_BUFFERL(7),
+			DATA_BUFFERH(8), DATA_BUFFERL(8),
+			DATA_BUFFERH(9), DATA_BUFFERL(9),
+			DATA_BUFFERH(10), DATA_BUFFERL(10),
+			DATA_BUFFERH(11), DATA_BUFFERL(11),
+			DATA_BUFFERH(12), DATA_BUFFERL(12),
+			DATA_BUFFERH(13), DATA_BUFFERL(13),
+			DATA_BUFFERH(14), DATA_BUFFERL(14)
 		);
-#undef DATA_BUFFER
+#undef DATA_BUFFERL
+#undef DATA_BUFFERH
 	}
 }
 
 VOID
 SpbTraceBuffers(
+	_In_ PPBC_DEVICE pDevice,
 	_In_ SPBREQUEST clientRequest
 )
 {
@@ -544,7 +564,7 @@ SpbTraceBuffers(
 
 	for (ULONG i = 0; i < parameters.SequenceTransferCount; i += 1)
 	{
-		SpbTraceBufferIndex(clientRequest, i);
+		SpbTraceBufferIndex(pDevice, clientRequest, i);
 	}
 
 }
@@ -1732,7 +1752,7 @@ Return Value:
         SPBREQUEST clientRequest = pDevice->ClientRequest;
         pDevice->ClientRequest = nullptr;
 
-		SpbTraceBuffers(clientRequest);
+		SpbTraceBuffers(pDevice, clientRequest);
 
         // In order to satisfy SDV, assume clientRequest
         // is equal to pDevice->ClientRequest. This suppresses
