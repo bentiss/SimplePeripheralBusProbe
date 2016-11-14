@@ -475,9 +475,10 @@ SpbTraceBufferIndex(
 	SPB_TRANSFER_DESCRIPTOR transferDescriptor;
 	PMDL pMdl;
 	const ULONG max_len = 1024;
-	ULONG i;
 	UCHAR pBuffer[max_len] = { 0 };
-
+	CHAR pPrefix[32]; /*  format "device NNN: ##nn write llll -" */
+	CHAR pDataString[5 + 3 * 16 + 1]; /* format "0000: XX XX XX XX" */
+	int dataIndex;
 	SPB_TRANSFER_DESCRIPTOR_INIT(&transferDescriptor);
 
 	SpbRequestGetTransferParameters(
@@ -486,67 +487,43 @@ SpbTraceBufferIndex(
 		&transferDescriptor,
 		&pMdl);
 
-	Trace(
-		TRACE_LEVEL_ERROR,
-		TRACE_FLAG_SPBAPI,
-		"Retrieved%s%sbuffer #%d (%lu) On device %I64d",
-		transferDescriptor.Direction == SpbTransferDirectionToDevice ? " write" : " ",
-		transferDescriptor.Direction == SpbTransferDirectionFromDevice ? "read " : " ",
-		index,
-		(unsigned long)transferDescriptor.TransferLength,
-		pDevice->PeripheralId.QuadPart
-	);
-
 	ULONG length = min((ULONG)transferDescriptor.TransferLength, max_len);
 
-	for (i = 0; i < length; i++)
+	for (ULONG i = 0; i < length; i++)
 	{
 		RequestGetByte(pMdl, transferDescriptor.TransferLength, i, &pBuffer[i]);
 	}
 
-	for (i = 0; i < length / 16; i++)
-	{
-		Trace(
-			TRACE_LEVEL_ERROR,
-			TRACE_FLAG_SPBAPI,
-			"%04x: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-			i * 16,
-			pBuffer[i * 16 + 0], pBuffer[i * 16 + 1], pBuffer[i * 16 + 2], pBuffer[i * 16 + 3],
-			pBuffer[i * 16 + 4], pBuffer[i * 16 + 5], pBuffer[i * 16 + 6], pBuffer[i * 16 + 7],
-			pBuffer[i * 16 + 8], pBuffer[i * 16 + 9], pBuffer[i * 16 + 10], pBuffer[i * 16 + 11],
-			pBuffer[i * 16 + 12], pBuffer[i * 16 + 13], pBuffer[i * 16 + 14], pBuffer[i * 16 + 15]
-		);
-	}
+	sprintf_s(pPrefix, sizeof(pPrefix),
+		"device %3I64d: %c#%02d %5s %4lu - ",
+		pDevice->PeripheralId.QuadPart,
+		index == 0 ? '#' : ' ',
+		index,
+		transferDescriptor.Direction == SpbTransferDirectionToDevice ? "write" : "read",
+		(unsigned long)transferDescriptor.TransferLength
+	);
 
-	if (i * 16 < length)
+	dataIndex = 0;
+	dataIndex += sprintf(&pDataString[dataIndex], "%04d: %02x", 0, pBuffer[0]);
+	for (ULONG i = 1; i <= length; i++)
 	{
-		const UCHAR table[] = { '0', '1', '2' , '3' , '4' , '5' , '6' , '7' , '8' , '9' , 'a' , 'b' , 'c' , 'd' , 'e' , 'f'};
-
-#define DATA_BUFFERH(_index) (i * 16 + _index < length ? table[(pBuffer[i * 16 + _index] & 0xF0) >> 4] : ' ')
-#define DATA_BUFFERL(_index) (i * 16 + _index < length ? table[(pBuffer[i * 16 + _index] & 0x0F) >> 0] : ' ')
-		Trace(
-			TRACE_LEVEL_ERROR,
-			TRACE_FLAG_SPBAPI,
-			"%04x: %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c %c%c",
-			i * 16,
-			DATA_BUFFERH(0), DATA_BUFFERL(0), 
-			DATA_BUFFERH(1), DATA_BUFFERL(1),
-			DATA_BUFFERH(2), DATA_BUFFERL(2),
-			DATA_BUFFERH(3), DATA_BUFFERL(3),
-			DATA_BUFFERH(4), DATA_BUFFERL(4),
-			DATA_BUFFERH(5), DATA_BUFFERL(5),
-			DATA_BUFFERH(6), DATA_BUFFERL(6),
-			DATA_BUFFERH(7), DATA_BUFFERL(7),
-			DATA_BUFFERH(8), DATA_BUFFERL(8),
-			DATA_BUFFERH(9), DATA_BUFFERL(9),
-			DATA_BUFFERH(10), DATA_BUFFERL(10),
-			DATA_BUFFERH(11), DATA_BUFFERL(11),
-			DATA_BUFFERH(12), DATA_BUFFERL(12),
-			DATA_BUFFERH(13), DATA_BUFFERL(13),
-			DATA_BUFFERH(14), DATA_BUFFERL(14)
-		);
-#undef DATA_BUFFERL
-#undef DATA_BUFFERH
+		if ((i % 16 == 0) || i == length)
+		{
+			Trace(
+				TRACE_LEVEL_ERROR,
+				TRACE_FLAG_SPBAPI,
+				"%s %s",
+				pPrefix,
+				pDataString
+			);
+			if (i == length)
+			{
+				break;
+			}
+			dataIndex = 0;
+			dataIndex += sprintf(&pDataString[dataIndex], "%04x:", i);
+		}
+		dataIndex += sprintf(&pDataString[dataIndex], " %02x", pBuffer[i]);
 	}
 }
 
