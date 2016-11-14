@@ -487,43 +487,46 @@ SpbTraceBufferIndex(
 		&transferDescriptor,
 		&pMdl);
 
-	ULONG length = min((ULONG)transferDescriptor.TransferLength, max_len);
-
-	for (ULONG i = 0; i < length; i++)
+	for (ULONG offset = 0; offset < (ULONG)transferDescriptor.TransferLength; offset += max_len)
 	{
-		RequestGetByte(pMdl, transferDescriptor.TransferLength, i, &pBuffer[i]);
-	}
+		ULONG length = min((ULONG)transferDescriptor.TransferLength - offset, max_len);
 
-	sprintf_s(pPrefix, sizeof(pPrefix),
-		"device %3I64d: %c#%02d %5s %4lu - ",
-		pDevice->PeripheralId.QuadPart,
-		index == 0 ? '#' : ' ',
-		index,
-		transferDescriptor.Direction == SpbTransferDirectionToDevice ? "write" : "read",
-		(unsigned long)transferDescriptor.TransferLength
-	);
-
-	dataIndex = 0;
-	dataIndex += sprintf(&pDataString[dataIndex], "%04d: %02x", 0, pBuffer[0]);
-	for (ULONG i = 1; i <= length; i++)
-	{
-		if ((i % 16 == 0) || i == length)
+		for (ULONG i = 0; i < length; i++)
 		{
-			Trace(
-				TRACE_LEVEL_ERROR,
-				TRACE_FLAG_SPBAPI,
-				"%s %s",
-				pPrefix,
-				pDataString
-			);
-			if (i == length)
-			{
-				break;
-			}
-			dataIndex = 0;
-			dataIndex += sprintf(&pDataString[dataIndex], "%04x:", i);
+			RequestGetByte(pMdl, transferDescriptor.TransferLength, i + offset, &pBuffer[i]);
 		}
-		dataIndex += sprintf(&pDataString[dataIndex], " %02x", pBuffer[i]);
+
+		sprintf_s(pPrefix, sizeof(pPrefix),
+			"device %3I64d: %c#%02d %5s %4lu - ",
+			pDevice->PeripheralId.QuadPart,
+			index == 0 ? '#' : ' ',
+			index,
+			transferDescriptor.Direction == SpbTransferDirectionToDevice ? "write" : "read",
+			(unsigned long)transferDescriptor.TransferLength
+		);
+
+		dataIndex = 0;
+		dataIndex += sprintf(&pDataString[dataIndex], "%04x: %02x", offset, pBuffer[0]);
+		for (ULONG i = 1; i <= length; i++)
+		{
+			if ((i % 16 == 0) || i == length)
+			{
+				Trace(
+					TRACE_LEVEL_ERROR,
+					TRACE_FLAG_SPBAPI,
+					"%s %s",
+					pPrefix,
+					pDataString
+				);
+				if (i == length)
+				{
+					break;
+				}
+				dataIndex = 0;
+				dataIndex += sprintf(&pDataString[dataIndex], "%04x:", i + offset);
+			}
+			dataIndex += sprintf(&pDataString[dataIndex], " %02x", pBuffer[i]);
+		}
 	}
 }
 
