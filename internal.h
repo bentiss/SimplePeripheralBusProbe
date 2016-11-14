@@ -120,11 +120,6 @@ ADDRESS_MODE, *PADDRESS_MODE;
 
 typedef struct PBC_TARGET_SETTINGS
 {
-    // TODO: Update this structure to include other
-    //       target settings needed to configure the
-    //       controller (i.e. connection speed, phase/
-    //       polarity for SPI).
-
     ADDRESS_MODE                  AddressMode;
     USHORT                        Address;
     ULONG                         ConnectionSpeed;

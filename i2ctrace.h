@@ -27,10 +27,6 @@ extern "C"
 //
 // Tracing Definitions:
 //
-// TODO: Define a unique tracing guid.
-//
-// Control GUID: 
-// {3AD0F092-64C8-4e69-B93D-7FB64933FFDD}
 
 #define WPP_CONTROL_GUIDS                           \
     WPP_DEFINE_CONTROL_GUID(                        \

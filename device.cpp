@@ -738,7 +738,7 @@ OnOtherInCallerContext(
 
 --*/
 {
-    //FuncEntry(TRACE_FLAG_SPBDDI);
+    FuncEntry(TRACE_FLAG_SPBDDI);
 
     NTSTATUS status;
 
@@ -810,7 +810,7 @@ exit:
         WdfRequestComplete(FxRequest, status);
     }
     
-    //FuncExit(TRACE_FLAG_SPBDDI);
+    FuncExit(TRACE_FLAG_SPBDDI);
 }
 
 NTSTATUS
@@ -1020,25 +1020,6 @@ OnOther(
 			IoControlCode
 		);
 	}
-
-    //
-    // TODO: the driver should take the following steps
-    //
-    //    1. Verify this specific DeviceIoContol code is supported,
-    //       otherwise mark as STATUS_NOT_SUPPORTED and complete.
-    //
-    //    2. If this IOCTL uses SPB_TRANSFER_LIST and the driver has
-    //       called SpbRequestCaptureIoOtherTransferList previously,
-    //       validate the request format. The driver can make use of
-    //       SpbRequestGetTransferParameters to retrieve each transfer
-    //       descriptor.
-    //
-    //       If this IOCTL uses some proprietary buffer formating 
-    //       instead of SPB_TRANSFER_LIST, validate appropriately.
-    //
-    //    3. Setup the device, target, and request contexts as necessary,
-    //       and program the hardware for the transfer.
-    //
 
 	if (!NT_SUCCESS(status))
 	{
