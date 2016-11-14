@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="device.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="driver.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="peripheral.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="device.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="driver.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="i2ctrace.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="internal.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="peripheral.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="LICENSE" />
+    <None Include="spbProbe.asl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{a4e5baeb-c3a4-4fb0-9574-f6ed6050c40f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers">
+      <UniqueIdentifier>{1a5224ae-77a3-4328-baa0-d786457e205f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Inf">
+      <UniqueIdentifier>{08f2de04-4d18-4db5-88e8-a80be66d09bb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Ressources">
+      <UniqueIdentifier>{2571e45b-ba42-48ea-9034-1ed25fabcb9f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="spbProbe.inx">
+      <Filter>Inf</Filter>
+    </Inf>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resource.rc">
+      <Filter>Ressources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

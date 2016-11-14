@@ -25,6 +25,8 @@
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">Win32</Platform>
     <SampleGuid>{666F5885-C0E7-43DD-AD99-B596AC486945}</SampleGuid>
+    <ProjectName>spbProbe</ProjectName>
+    <WindowsTargetPlatformVersion>$(LatestTargetPlatformVersion)</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -76,27 +78,28 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" />
   </ImportGroup>
   <ItemGroup Label="WrappedTaskItems">
-    <ClCompile Include="driver.cpp">
-      <WppEnabled>true</WppEnabled>
-      <WppKernelMode>true</WppKernelMode>
-      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
-      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
-    </ClCompile>
     <ClCompile Include="device.cpp">
       <WppEnabled>true</WppEnabled>
       <WppKernelMode>true</WppKernelMode>
       <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
       <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
     </ClCompile>
-    <ClCompile Include="peripheral.cpp">
-      <WppEnabled Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</WppEnabled>
-      <WppTraceFunction Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
-      <WppScanConfigurationData Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">i2ctrace.h</WppScanConfigurationData>
+    <ClCompile Include="driver.cpp">
+      <WppEnabled>true</WppEnabled>
+      <WppKernelMode>true</WppKernelMode>
+      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
+      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
     </ClCompile>
-    <Inf Include=".\skeletoni2c.inx">
+    <ClCompile Include="peripheral.cpp">
+      <WppEnabled>true</WppEnabled>
+      <WppKernelMode>true</WppKernelMode>
+      <WppScanConfigurationData>i2ctrace.h</WppScanConfigurationData>
+      <WppTraceFunction>Trace(LEVEL,FLAGS,MSG,...)</WppTraceFunction>
+    </ClCompile>
+    <Inf Include="spbProbe.inx">
       <Architecture>$(InfArch)</Architecture>
       <SpecifyArchitecture>true</SpecifyArchitecture>
-      <CopyOutput>.\$(IntDir)\skeletoni2c.inf</CopyOutput>
+      <CopyOutput>.\$(IntDir)\spbProbe.inf</CopyOutput>
     </Inf>
     <OtherWpp Include="resource.rc">
       <WppEnabled>true</WppEnabled>
@@ -106,16 +109,16 @@
     </OtherWpp>
   </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <TargetName>skeletoni2c</TargetName>
+    <TargetName>spbProbe</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <TargetName>skeletoni2c</TargetName>
+    <TargetName>spbProbe</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <TargetName>skeletoni2c</TargetName>
+    <TargetName>spbProbe</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <TargetName>skeletoni2c</TargetName>
+    <TargetName>spbProbe</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -193,7 +196,7 @@
     <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <ItemGroup>
-    <FilesToPackage Include="$(TargetDir)\skeletoni2c.pdb" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <FilesToPackage Include="$(TargetDir)\spbProbe.pdb">
       <PackageRelativeDirectory>
       </PackageRelativeDirectory>
     </FilesToPackage>
@@ -208,11 +211,14 @@
     <None Exclude="@(None)" Include="*.ico;*.cur;*.bmp;*.dlg;*.rct;*.gif;*.jpg;*.jpeg;*.wav;*.jpe;*.tiff;*.tif;*.png;*.rc2" />
     <None Exclude="@(None)" Include="*.def;*.bat;*.hpj;*.asmx" />
     <None Include="LICENSE" />
-    <None Include="skeletoni2c.asl" />
+    <None Include="spbProbe.asl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="device.h" />
+    <ClInclude Include="driver.h" />
+    <ClInclude Include="i2ctrace.h" />
+    <ClInclude Include="internal.h" />
     <ClInclude Include="peripheral.h" />
-    <ClInclude Exclude="@(ClInclude)" Include="skeletoni2c.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
