@@ -211,6 +211,7 @@
     <None Exclude="@(None)" Include="*.ico;*.cur;*.bmp;*.dlg;*.rct;*.gif;*.jpg;*.jpeg;*.wav;*.jpe;*.tiff;*.tif;*.png;*.rc2" />
     <None Exclude="@(None)" Include="*.def;*.bat;*.hpj;*.asmx" />
     <None Include="LICENSE" />
+    <None Include="README.md" />
     <None Include="spbProbe.asl" />
   </ItemGroup>
   <ItemGroup>

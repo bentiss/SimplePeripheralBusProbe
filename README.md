@@ -1,117 +1,265 @@
-Skeleton I2C Sample Driver
-=========================
+I2C/SPI probe for Windows 10
+============================
 
-The SkeletonI2C sample demonstrates how to design a KMDF controller driver for Windows that conforms to the [simple peripheral bus](http://msdn.microsoft.com/en-us/library/windows/hardware/hh450903) (SPB) device driver interface (DDI). SPB is an abstraction for low-speed serial buses (for example, I<sup>2</sup>C and SPI) that allows peripheral drivers to be developed for cross-platform use without any knowledge of the underlying bus hardware or device connections. While this sample implements an empty I<sup>2</sup>C driver, it could just as easily be the starting point for an SPI driver with only minor modifications.
+This driver is *extremely* experimental and should only be used by people knowing what they are doing and not afraid of destroying their Windows install.
 
-Note that the SkeletonI2C sample is simplified to show the overall structure of an SPB controller, but contains only the code that the driver requires to communicate with the [SPB framework extension (SpbCx)](http://msdn.microsoft.com/en-us/library/windows/hardware/hh406203) and KMDF. The SkeletonI2C sample driver omits all hardware-specific code. It does not simulate data transfers or implement request completion asynchronously. Pay close attention to code comments marked with "TODO" that refer to blocks of code that must be removed or updated.
+The purpose of this project is to insert a pass-through driver between the target I2C or SPI device and its driver.
+This pass-through device logs each serial transaction made by the driver. It's useful to watch the raw sequences to ensure the driver works properly.
 
-The simplified structure of the SkeletonI2C sample driver makes it a convenient starting point for development of a real SPB controller driver that manages the hardware functions in an SPB controller.
+This code is a mix of 2 drivers found in the Windows drivers sample repository, so the license is the Miscrosoft one (see LICENSE).
 
-Modifying the sample
+Requirements
+------------
+
+- a Windows machine with a serial (I2C or SPI) device ACPI-enumerated
+- time
+- skills
+- ```traceview.exe``` (provided by the WDK in tools\tracing\<Platform>)
+- ```asl.exe``` (provided by the WDK in Tools\x64\ACPIVerify)
+- a way to boot a repair environment if things goes wrong (recovery disk, Windows disk, repair partition)
+
+Overloading the DSDT
 --------------------
 
-Here are some high-level points to consider when modifying the SkeletonI2C sample for use on real hardware:
+Windows 8+ allows to overload the DSDT through the ```/loadtable``` option of asl.exe.
+See https://msdn.microsoft.com/en-us/windows/hardware/drivers/bringup/microsoft-asl-compiler
 
--   Edit (and likely rename) Skeletoni2c.h to describe your hardware's register set.
--   Modify Controller.cpp and Device.cpp to translate the SPB DDI and primitives into I<sup>2</sup>C or SPI protocol for your hardware. This includes initialization, I/O configuration, and interrupt processing.
--   Address any comments marked with "TODO" in the sample, especially those that short circuit the I/O path to complete requests synchronously.
--   Modify the HWID (`ACPI\skeletoni2c`) in Skeletoni2c.inf to match the device node in your firmware.
--   Generate and specify a unique trace GUID in I2ctrace.h.
--   Refactor the driver name, functions, comments, etc., to better describe your implementation.
+The first step is to retrieve the current DSDT (or SSDT if the device is declared in the SSDT). Run in a cmd.exe process as an Administrator:
 
-Code tour
----------
+```
+asl.exe /tab=DSDT
+```
 
-The following are relevant functions in the SkeletonI2C driver for implementing the SPB DDI.
+This will produce a DSDT.ASL file in the current directory.
+Next step is to increment the version of the table (le last number in ```DefinitionBlock()```).
 
-Function
+Then recompile the DSDT and fix any errors
 
-Description
+```
+asl.exe DSDT.ASL
+```
 
-INITIALIZATION
+When the errors are fixed, you can load the table for the next boot:
 
-`OnDeviceAdd`
+```
+asl.exe /loadtable -v DSDT.AML
+```
 
-Within `OnDeviceAdd`, the driver makes several configuration calls for SPB.
+Make sure the version is the one you just incremented.
+The table will be stored in the registry under ```HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\ACPI\Parameters\DSDT\XXX\YYY\ZZZ``` where ```XXX```,```YYY```,```ZZZ``` will depend from your edited DSDT.
 
-[**SpbDeviceInitConfig**](http://msdn.microsoft.com/en-us/library/windows/hardware/hh450918) must be called before creating the WDFDEVICE. Note that SpbCx sets a default security descriptor on the device object, but the controller driver can override it by calling [**WdfDeviceInitAssignSDDLString**](http://msdn.microsoft.com/en-us/library/windows/hardware/ff546035) after **SpbDeviceInitConfig**.
+Before rebooting, make sure Windows will allow non signed drivers (*Be cautious when enabking this, any driver can now be installed, even bad ones*. You have been warned).
 
-After creating the WDFDEVICE, the driver configures it appropriately for SPB by calling [**SpbDeviceInitialize**](http://msdn.microsoft.com/en-us/library/windows/hardware/hh450919). Here the driver also sets the target and request attributes.
+```
+bcdedit /set testsigning on
+```
 
-Finally the driver configures a WDF system-managed idle time-out.
+Reboot. If the device reboots and a new dump of the DSDT shows your incremented version number, you are good to continue. If not, follow the next section to fix the broken boot.
 
-TARGET CONNECTION
+What if the DSDT is wrong and I get the blue screen ACPI_BIOS_ERROR at boot?
+----------------------------------------------------------------------------
 
-`OnTargetConnect`
+As mentioned previously, the overloaded DSDT is just stored in the registry, so the trick is to edit the registry and remove the keys.
 
-Invoked when a client opens a handle to the specified SPB target. Queries the I<sup>2</sup>C connection parameters from the resource hub (via SPB) and initializes the target context.
+So if Windows doesn't start, you need first to boot into the recovery environment. 
+For that, the simplest way is to boot the repair partition or use a recovery disk (search Microsoft's site for how to build one).
 
-SPB I/O CALLBACKS
+Once you are in the recovery environment, there is a trick (thanks this [blog](http://www.techrepublic.com/blog/windows-and-office/use-the-recovery-drive-command-prompt-to-edit-the-registry-or-recover-data/) and others).
 
-`OnRead`
+The key is that when you are in the recovery, if you start ```regedit```, the registry that will be edited is the one from the recovery environment, not the one from the installation.
 
-SPB read callback. Invokes the `PbcConfigureForNonSequence` function to set up the transfer.
+So once ```regedit``` is started, you need to add the keys from the current installation by using ```Load Hive...``` from the ```File``` menu.
+You will need to lad the file ```%windir%\system32\config\SYSTEM```.
+In this newly loaded key, go down to ```HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\ACPI\Parameters\DSDT\XXX\YYY\ZZZ``` (as mentioned previously) and simply remove the ```ZZZ``` folder.
 
-`OnWrite`
+Reboot and enjoy a working Windows.
 
-SPB write callback. Invokes the `PbcConfigureForNonSequence` function to set up the transfer.
+Insert the Probe in the DSDT
+----------------------------
 
-`OnSequence`
+Now that you have a working environment for overloading the DSDT, we can start inserting the probe in order to be able to dump traces.
 
-SPB sequence callback. Configures the controller for an atomic transfer\*.
+Let's say you have a HID over I2C device not working proprely and you want to check the I2C traces.
 
-`OnControllerLock`
+The DSDT will look like (example taken from https://msdn.microsoft.com/en-us/library/windows/hardware/dn642101(v=vs.85).aspx):
 
-SPB lock controller callback. Configures to handle subsequent I/O as an atomic transfer\*. For I<sup>2</sup>C the controller should place a start bit on the bus. For SPI the controller should assert the chip-select line. The driver may choose to carry this out as part of this callback or defer until the first I/O operation is received (the next call to `OnRead` or `OnWrite`).
+```
+Scope (\_SB) {
 
-`OnControllerUnlock`
+//--------------------
+//  General Purpose I/O, ports 0...127
+//--------------------
 
-SPB unlock controller callback. Marks the end of an atomic transfer\*. For I<sup>2</sup>C, the controller should place a stop bit on the bus. For SPI, the controller should de-assert the chip-select line.
+    
+Device(HIDI2C_DEVICE1) {
+    Name(_ADR,0)
+    Name (_HID, "MSFT1234”) 
+    Name (_CID, "PNP0C50") 
+    Name (_UID, 3) 
 
-SPB HELPER METHODS
+    Method(_CRS, 0x0, NotSerialized)
+    {
+        Name (RBUF, ResourceTemplate ()
+        {
+        // Address 0x07 on I2C-X (OEM selects this address)
+       //IHV SPECIFIC I2C3 = I2C Controller; TGD0 = GPIO Controller; 
+        I2CSerialBus (0x07, ControllerInitiated, 100000,AddressingMode7Bit, "\\_SB.I2C3",,,,)
+        GpioInt(Level, ActiveLow, Exclusive, PullUp, 0, "\\_SB. TGD0", 0 , ResourceConsumer, , ) {40}  
+        })
+     Return(RBUF)
+     }
 
-`PbcConfigureForIndex`
 
-Configures the request context for the specified transfer index. This could be a single I/O or part of a sequence.
 
-`PbcRequestComplete`
+     Method(_DSM, 0x4, NotSerialized)
+     {
+        // BreakPoint
+        Store ("Method _DSM begin", Debug)
 
-Sets the number of bytes completed for a request and invokes the [**SpbRequestComplete**](http://msdn.microsoft.com/en-us/library/windows/hardware/hh450920) method.
+        // DSM UUID
+        switch(ToBuffer(Arg0))
+        {		
+            // ACPI DSM UUID for HIDI2C
+            case(ToUUID("3CDFF6F7-4267-4555-AD05-B30A3D8938DE"))
+            {
+                // DSM Function
+                switch(ToInteger(Arg2))
+                {
+                    // Function 0: Query function, return based on revision
+                    case(0)
+                    {
+                        // DSM Revision
+                        switch(ToInteger(Arg1))
+                        {
+                            // Revision 1: Function 1 supported
+                            case(1)
+                            {
+                                Store ("Method _DSM Function Query", Debug)
+                                Return(Buffer(One) { 0x03 })
+                            }
+                            
+                            default
+                            {
+                                // Revision 2+: no functions supported
+                                Return(Buffer(One) { 0x00 })
+                            }
+                        }
+                    }
 
-\*An atomic transfer in SPB is implemented using Sequence or a Lock/Unlock pair. For I<sup>2</sup>C, this means a set of reads and writes with restarts in between. For SPI, this means a set of reads and writes with the chip select-line asserted throughout.
+                    // Function 1 : HID Function
+                    case(1)
+                    {
+                        Store ("Method _DSM Function HID", Debug)
+                        
+                        // HID Descriptor Address
+                        Return(0x0001)
+                    }
+                    
+                    default
+                    {
+                        // Functions 2+: not supported
+                    }
+                }
+            }
+            
+            default
+            {
+                // No other GUIDs supported
+                Return(Buffer(One) { 0x00 })
+            }
+        }
+    }
+}
+```
 
-The following are relevant functions in the SkeletonI2C driver for implementing controller-specific I2C protocol. For the most part, these are placeholders and must be filled in appropriately.
+We are interested here in the ```_CRS``` method which describes the ressources used by teh device.
 
-Function
+In the same scope (```\_SB```) we are going to add one new I2C device that uses the same I2C target (found in ```spbProbe.asl```):
 
-Description
+```
+Device(SPB1)
+{
+    Name(_HID, "spbProbe")
+    Name(_UID, 1)
+	Method(_CRS, 0x0, NotSerialized)
+    {
+        Name (RBUF, ResourceTemplate ()
+        {
+            I2CSerialBus (0x07, ControllerInitiated, 100000,AddressingMode7Bit, "\\_SB.I2C3",,,,)
+        })
+        Return(RBUF)
+    }
 
-INITIALIZATION
+}
+```
 
-`ControllerInitialize`
+And we edit the current device to point to this one instead:
 
-One-time controller initialization. Prepare FIFOs, clocks, interrupts, etc.
+```
+Device(HIDI2C_DEVICE1) {
+    Name(_ADR,0)
+    Name (_HID, "MSFT1234”) 
+    Name (_CID, "PNP0C50") 
+    Name (_UID, 3) 
 
-`ControllerConfigureForTransfer`
+    Method(_CRS, 0x0, NotSerialized)
+    {
+        Name (RBUF, ResourceTemplate ()
+        {
+        // Address 0x07 on I2C-X (OEM selects this address)
+       //IHV SPECIFIC I2C3 = I2C Controller; TGD0 = GPIO Controller; 
+        //I2CSerialBus (0x07, ControllerInitiated, 100000,AddressingMode7Bit, "\\_SB.I2C3",,,,)
+        I2CSerialBus (0x07, ControllerInitiated, 100000,AddressingMode7Bit, "\\_SB.SPB1",,,,)
+        GpioInt(Level, ActiveLow, Exclusive, PullUp, 0, "\\_SB. TGD0", 0 , ResourceConsumer, , ) {40}  
+        })
+     Return(RBUF)
+     }
 
-Per-I/O controller configuration. Depending on the type of I/O (and whether its part of an ongoing atomic transfer), the driver may need to configure direction, set interrupts, etc.
+```
 
-Additionally, for I<sup>2</sup>C, the driver may need to insert a start, restart, or stop bit as necessary, and for SPI the driver may need to assert or de-assert the chip select line.
+Do not forget to increment the DSDT version. Then recompile the DSDT and load it (```asl /loadtable DSDT.AML```).
 
-I/O PROCESSING
+Reboot.
 
-`OnInterruptIsr`
+In the ```Device Manager```, there should be a new device with an exclamation mark (```Unknown Device```) with a path ```ACPI\SPBPROBE\1``` in the ```Details``` panel of the device.
 
-Interrupt callback. Acknowledges interrupts and saves state as necessary. Queues a DPC for processing.
+Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can' t trust the publisher of teh driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
 
-`OnInterruptDpc`
+Now the device should show up in the ```system devices``` list and will have the name ```I1C/SPI Probe Controller Driver```.
+If you did not messed up, the target device (the HID over I2C device we are targetting) should still be working, and the probe must also say that it is working properly.
 
-DPC callback. Processes saved interrupts. If necessary the request is completed.
+Get traces from the probe
+-------------------------
 
-`ControllerProcessInterrupts`
+Run ```traceview.exe``` as an Administrator. Then ```File``` -> ```Create New Log Session...```.
 
-Handles processing for both normal and error condition interrupts. Invokes `ControllerCompleteTransfer`() as appropriate.
+Chose the .pdb from the driver in the ```Add provider``` window. Then ```Next```.
+By default, you will only have the real time display selected. If you want to store and process the logs, you want to also log the data to ta file.
 
-`ControllerCompleteTransfer`
+For better traces, before hitting ```Finish```, disable the targetted device in Device Manager so that the logs start as if the device have just been plugged in.
 
-Invoked when an I/O completes or an error is detected. If this I/O is part of a sequence, `PbcRequestConfigureForIndex`() is called to prepare the next I/O; otherwise, the request is marked for completion.
+*Note:* By default, the traces are dumped as ```Error``` level. So you don't need to set any flags.
+If you run into problems and need to debug the probe, you can lower the debug level here to trace what is happening in the driver.
+
+Convert the traces into a text file
+-----------------------------------
+
+When you record the logs, the traces are not in a text file, which doesn't help much to look at them.
+
+```traceview``` allows to convert them into text.
+
+First, you need to export the dictionnary from the pdb file:
+
+```
+traceview.exe -parsepdb spbProbe.pdb
+```
+
+Then you can dump the actual log file:
+
+```
+traceview.exe -process LogSession_mmddyy_hhmmss.etl -o myFirstLogs.txt
+```
+
+(amend ```LogSession_mmddyy_hhmmss.etl``` and ```myFirstLogs.txt``` to match your needs).
+
+That's it. Now ```myFirstLogs.txt``` contains the logs and you can do an analysis of where the problem is.
