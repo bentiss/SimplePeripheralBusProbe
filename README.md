@@ -1,12 +1,12 @@
 I2C/SPI probe for Windows 10
 ============================
 
-This driver is *extremely* experimental and should only be used by people knowing what they are doing and not afraid of destroying their Windows install.
+This driver is **extremely** experimental and should only be used by people knowing what they are doing and not afraid of destroying their Windows install.
 
 The purpose of this project is to insert a pass-through driver between the target I2C or SPI device and its driver.
 This pass-through device logs each serial transaction made by the driver. It's useful to watch the raw sequences to ensure the driver works properly.
 
-This code is a mix of 2 drivers found in the Windows drivers sample repository, so the license is the Miscrosoft one (see LICENSE).
+This code is a mix of 2 drivers found in the Windows drivers sample repository, so the license is the Microsoft one (see LICENSE).
 
 Requirements
 ------------
@@ -81,7 +81,7 @@ Now that you have a working environment for overloading the DSDT, we can start i
 
 Let's say you have a HID over I2C device not working properly and you want to check the I2C traces.
 
-The DSDT will look like (example taken from https://msdn.microsoft.com/en-us/library/windows/hardware/dn642101(v=vs.85).aspx):
+The DSDT will look like (example taken from the [HID over I2C specification](https://msdn.microsoft.com/en-us/library/windows/hardware/dn642101(v=vs.85).aspx)):
 
 ```
 Scope (\_SB) {
@@ -93,7 +93,7 @@ Scope (\_SB) {
     
 Device(HIDI2C_DEVICE1) {
     Name(_ADR,0)
-    Name (_HID, "MSFT1234”) 
+    Name (_HID, "MSFT1234â€) 
     Name (_CID, "PNP0C50") 
     Name (_UID, 3) 
 
@@ -198,7 +198,7 @@ And we edit the current device to point to this one instead:
 ```
 Device(HIDI2C_DEVICE1) {
     Name(_ADR,0)
-    Name (_HID, "MSFT1234”) 
+    Name (_HID, "MSFT1234â€) 
     Name (_CID, "PNP0C50") 
     Name (_UID, 3) 
 
@@ -223,7 +223,7 @@ Reboot.
 
 In the ```Device Manager```, there should be a new device with an exclamation mark (```Unknown Device```) with a path ```ACPI\SPBPROBE\1``` in the ```Details``` panel of the device.
 
-Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can' t trust the publisher of the driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
+Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can't trust the publisher of the driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
 
 Now the device should show up in the ```system devices``` list and will have the name ```I1C/SPI Probe Controller Driver```.
 If you did not messed up, the target device (the HID over I2C device we are targeting) should still be working, and the probe must also say that it is working properly.
@@ -238,8 +238,8 @@ By default, you will only have the real time display selected. If you want to st
 
 For better traces, before hitting ```Finish```, disable the targeted device in Device Manager so that the logs start as if the device have just been plugged in.
 
-*Note:* By default, the traces are dumped as ```Error``` level. So you don't need to set any flags.
-If you run into problems and need to debug the probe, you can lower the debug level here to trace what is happening in the driver.
+> **Note:** By default, the traces are dumped as ```Error``` level. So you don't need to set any flags.
+> If you run into problems and need to debug the probe, you can lower the debug level here to trace what is happening in the driver.
 
 Convert the traces into a text file
 -----------------------------------
