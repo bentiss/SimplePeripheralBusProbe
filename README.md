@@ -223,7 +223,7 @@ Reboot.
 
 In the ```Device Manager```, there should be a new device with an exclamation mark (```Unknown Device```) with a path ```ACPI\SPBPROBE\1``` in the ```Details``` panel of the device.
 
-Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can't trust the publisher of the driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
+Load the driver from this repository (after compiling it or by downloading it from the [releases page](https://github.com/bentiss/SimplePeripheralBusProbe/releases)). You will get a big red screen telling you Windows can't trust the publisher of the driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
 
 Now the device should show up in the ```system devices``` list and will have the name ```I1C/SPI Probe Controller Driver```.
 If you did not messed up, the target device (the HID over I2C device we are targeting) should still be working, and the probe must also say that it is working properly.
