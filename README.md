@@ -31,7 +31,7 @@ asl.exe /tab=DSDT
 ```
 
 This will produce a DSDT.ASL file in the current directory.
-Next step is to increment the version of the table (le last number in ```DefinitionBlock()```).
+Next step is to increment the version of the table (the last number in ```DefinitionBlock()```).
 
 Then recompile the DSDT and fix any errors
 
@@ -48,7 +48,7 @@ asl.exe /loadtable -v DSDT.AML
 Make sure the version is the one you just incremented.
 The table will be stored in the registry under ```HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\ACPI\Parameters\DSDT\XXX\YYY\ZZZ``` where ```XXX```,```YYY```,```ZZZ``` will depend from your edited DSDT.
 
-Before rebooting, make sure Windows will allow non signed drivers (*Be cautious when enabking this, any driver can now be installed, even bad ones*. You have been warned).
+Before rebooting, make sure Windows will allow non signed drivers (*Be cautious when enabling this, any driver can now be installed, even bad ones*. You have been warned).
 
 ```
 bcdedit /set testsigning on
@@ -79,7 +79,7 @@ Insert the Probe in the DSDT
 
 Now that you have a working environment for overloading the DSDT, we can start inserting the probe in order to be able to dump traces.
 
-Let's say you have a HID over I2C device not working proprely and you want to check the I2C traces.
+Let's say you have a HID over I2C device not working properly and you want to check the I2C traces.
 
 The DSDT will look like (example taken from https://msdn.microsoft.com/en-us/library/windows/hardware/dn642101(v=vs.85).aspx):
 
@@ -223,10 +223,10 @@ Reboot.
 
 In the ```Device Manager```, there should be a new device with an exclamation mark (```Unknown Device```) with a path ```ACPI\SPBPROBE\1``` in the ```Details``` panel of the device.
 
-Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can' t trust the publisher of teh driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
+Load the driver from this repository (after compiling it). You will get a big red screen telling you Windows can' t trust the publisher of the driver, which is true. But if you are here, well you know what you are doing so just hit ```Install it anyway```.
 
 Now the device should show up in the ```system devices``` list and will have the name ```I1C/SPI Probe Controller Driver```.
-If you did not messed up, the target device (the HID over I2C device we are targetting) should still be working, and the probe must also say that it is working properly.
+If you did not messed up, the target device (the HID over I2C device we are targeting) should still be working, and the probe must also say that it is working properly.
 
 Get traces from the probe
 -------------------------
@@ -236,7 +236,7 @@ Run ```traceview.exe``` as an Administrator. Then ```File``` -> ```Create New Lo
 Chose the .pdb from the driver in the ```Add provider``` window. Then ```Next```.
 By default, you will only have the real time display selected. If you want to store and process the logs, you want to also log the data to ta file.
 
-For better traces, before hitting ```Finish```, disable the targetted device in Device Manager so that the logs start as if the device have just been plugged in.
+For better traces, before hitting ```Finish```, disable the targeted device in Device Manager so that the logs start as if the device have just been plugged in.
 
 *Note:* By default, the traces are dumped as ```Error``` level. So you don't need to set any flags.
 If you run into problems and need to debug the probe, you can lower the debug level here to trace what is happening in the driver.
@@ -248,7 +248,7 @@ When you record the logs, the traces are not in a text file, which doesn't help 
 
 ```traceview``` allows to convert them into text.
 
-First, you need to export the dictionnary from the pdb file:
+First, you need to export the dictionary from the pdb file:
 
 ```
 traceview.exe -parsepdb spbProbe.pdb
