@@ -1,3 +1,4 @@
+
 I2C/SPI probe for Windows 10
 ============================
 
@@ -25,6 +26,8 @@ Windows 8+ allows to overload the DSDT through the ```/loadtable``` option of as
 See https://msdn.microsoft.com/en-us/windows/hardware/drivers/bringup/microsoft-asl-compiler
 
 The first step is to retrieve the current DSDT (or SSDT if the device is declared in the SSDT). Run in a cmd.exe process as an Administrator:
+
+You will find WDK Tools under ```C:\Program Files (x86)\Windows Kits\10\Tools\x64\ACPIVerify``` if you didn't changed the default installation path.
 
 ```
 asl.exe /tab=DSDT
@@ -63,14 +66,15 @@ As mentioned previously, the overloaded DSDT is just stored in the registry, so 
 
 So if Windows doesn't start, you need first to boot into the recovery environment. 
 For that, the simplest way is to boot the repair partition or use a recovery disk (search Microsoft's site for how to build one).
+For OEM installs, you just need to boot again on Windows and it will start the recovery environment.
 
 Once you are in the recovery environment, there is a trick (thanks this [blog](http://www.techrepublic.com/blog/windows-and-office/use-the-recovery-drive-command-prompt-to-edit-the-registry-or-recover-data/) and others).
 
 The key is that when you are in the recovery, if you start ```regedit```, the registry that will be edited is the one from the recovery environment, not the one from the installation.
 
-So once ```regedit``` is started, you need to add the keys from the current installation by using ```Load Hive...``` from the ```File``` menu.
-You will need to lad the file ```%windir%\system32\config\SYSTEM```.
-In this newly loaded key, go down to ```HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\ACPI\Parameters\DSDT\XXX\YYY\ZZZ``` (as mentioned previously) and simply remove the ```ZZZ``` folder.
+So once ```regedit``` is started, you need to add the keys from the current installation by using ```Load Hive...``` from the ```File``` menu. If the menu entry ```Load Hive...``` is disabled, please select a node (e.g. `HKEY_LOCAL_MACHINE`) and then the menu entry should be available.
+You will need to load the file ```%windir%\system32\config\SYSTEM```. You will be prompted to set a key name for this loaded hive. Name it as you wish (e.g. ```Origin```).
+In this newly loaded key, go down to ```HKEY_LOCAL_MACHINE\Origin\HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\ACPI\Parameters\DSDT\XXX\YYY\ZZZ``` (as mentioned previously) and simply remove the ```ZZZ``` folder.
 
 Reboot and enjoy a working Windows.
 
