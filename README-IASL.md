@@ -13,7 +13,7 @@ Requirements
 Instructions
 ------------
 
-The guide for doing everything with Microsoft `asl.exe` is quite detailed. Use it where details are required.
+The guide for doing everything with Microsoft `asl.exe` is quite detailed. Use the original [README](./README.md) where details are required.
 
 This is as an extension because often the microsoft compiler does not know how to compile the `asl` it extracted.
 Intel created a compiler that is much clearer in it's error messages and knows howto compile the `asl`-files.
