@@ -25,7 +25,7 @@ Getting the Binary DSDT
 Install `RWEverything`.
 Once you have installed `RWEverything`, run it and from the `Access` menu, choose `ACPI Tables`. From the `ACPI Table` window that opens, first select the `DSDT` tab to make sure the `DSDT` table is active, then choose the `Save as Binary` button on toolbar (or `Shift+F2`).
 
-You should then have a file called `DSDT.bin`
+You should then have a file called `DSDT.aml`
 
 Decompiling
 ===========
