@@ -185,7 +185,7 @@ In the same scope (```\_SB```) we are going to add one new I2C device that uses 
 ```
 Device(SPB1)
 {
-    Name(_HID, "spbProbe")
+    Name(_HID, "PROBE01")
     Name(_UID, 1)
 	Method(_CRS, 0x0, NotSerialized)
     {
