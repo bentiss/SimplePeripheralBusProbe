@@ -9,6 +9,8 @@ This pass-through device logs each serial transaction made by the driver. It's u
 
 This code is a mix of 2 drivers found in the Windows drivers sample repository, so the license is the Microsoft one (see LICENSE).
 
+Often `asl.exe` fails at compiling its extracted file. The `iasl.exe` provided by Intel is much better at this job. For a guide on how to use this compiler instead use: [README-IASL.md](./README-IASL.md) (this text is just an extension and not a replacement for the explanations here)
+
 Requirements
 ------------
 
@@ -176,7 +178,7 @@ Device(HIDI2C_DEVICE1) {
 }
 ```
 
-We are interested here in the ```_CRS``` method which describes the ressources used by teh device.
+We are interested here in the ```_CRS``` method which describes the ressources used by the device.
 
 In the same scope (```\_SB```) we are going to add one new I2C device that uses the same I2C target (found in ```spbProbe.asl```):
 
