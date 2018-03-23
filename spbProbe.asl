@@ -9,7 +9,7 @@
 //
 Device(I2C)
 {
-    Name(_HID, "spbProbe")
+    Name(_HID, "PROBE01")
     Name(_UID, 1)
 	Method(_CRS, 0x0, NotSerialized)
     {
